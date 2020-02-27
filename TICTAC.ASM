@@ -111,7 +111,7 @@ InitGame:
     sub AL,31h     ; ascii for 1 is 31h, so turn that into a 0
     sub AL,9       ; now subtract 9, that way if it is 0-8 we will trigger the carry flag
     jnc noTryMove  ; if they did not input 1-9, then don't try anything (continue)
-    call tryMove   ;attempt the requested move, if it is valid, the board will be updated, and the player will change
+    call tryMove   ; attempt the requested move, if it is valid, the board will be updated, and the player will change
   noTryMove:
 
     jmp startGameLoop ; refresh screen
@@ -133,55 +133,64 @@ main ENDP
 ;---------------------------|
 ; Draw Board Procedure      |
 ;---------------------------|
-drawBoard PROC ; Define board drawing procedure
-  mov CL,0Bh         ; set count to 11
-  mov AH,pattern     ; place board pattern in AH
-drawBLoop:
-  mov BX,0           ; set register where string offset goes to 0
-  mov AL,AH          ; place remaining board pattern in AL
-  and AL,1           ; 0 out all but LSB
-                     ; [shouldn't need, as AND should set Zero Flag] cmp 1,AL       ; subtracts AL from 1, and sets flags
-  jz drawBFinish     ; if LSB is 0, skips following command (which would end up making the string output routine print the second board design)
-  mov BX,0Bh         ; set register where string offset goes to 0Bh (11)
-drawBFinish:
-  ;-----------------------------------------|
-  ; determine if we should draw play pieces |
-  ;-----------------------------------------|
-  mov DL,CL           ; clone count into DL
-  and DL,3            ; eliminate bits 2-7
-  cmp DL,2            ; make sure it starts with 10
-  jnz determineFinish ; if DL doesn't equal 10, stop testing
-  push AX             ;\
-  push BX             ; |- Save
-  push CX             ;/
-  mov DL,CL           ; clone count into DL
-  sub DL,2            ; subract 2 (this code SHOULD only run if CL is 2 6 or 10)
-  shr DX,1
-  shr DX,1            ; DL has now been divided by 4
-  and DL,3            ; remove first 2 bits (in case there was anything in DH)
-  call extractRow     ; will place play pieces for this row
-  pop CX              ;\
-  pop BX              ; |- Restore
-  pop AX              ;/
-  add BX,16h          ; add 22 to address so we draw 3rd board design
-  ;-----------------------------------------|
-  ; play piece row determination finished   |
-  ;-----------------------------------------|
-determineFinish:
-  add BX,OFFSET board ; add OFFSET BOARD to register where string offset goes
-  mov DX,0Bh          ; mov 0Bh to a register (11), to represent the length of the strings
-  push CX             ; save count to stack (cannot push byte register), using CL
-  push AX             ; save remaining pattern to stack, using AH
-  call WriteText      ; call string output proc
-  mov DX,OFFSET CRLF  ; load offset address of CRLF into DX
-  call Write          ; will output CRLF to the console
-  pop AX              ; get pattern back! (AH)
-  pop CX              ; get count back; (CL)
-  shr AH,1            ; shift pattern right, to get rid of previous pattern, and to see the next
-  dec CL              ; decrease count by one, since part of the board has now been drawn
-  jnz drawBLoop       ; draw another part of the board if count isn't 0, otherwise stop doing that!
-  ret
-drawBoard ENDP
+drawBoard   PROC
+            ;
+            ; initialize board to be drawn (11 lines, with AH as "tile" pattern)
+            ;
+            mov CL,0Bh         ; set count to 11
+            mov AH,pattern     ; place board pattern in AH
+
+            ;
+            ; each iteration of this loop will print one strip of the board to the screen
+            ;
+drawBLoop:  mov BX,0           ; set register where string offset goes to 0
+            mov AL,AH          ; place remaining board pattern in AL
+            and AL,1           ; 0 out all but LSB
+            jz drawBDeter      ; if LSB is 0, skips following command
+            mov BX,0Bh         ; change offset to 11, so we print the 2nd board strip
+
+drawBDeter: ;-----------------------------------------|
+            ; determine if we should draw play pieces |
+            ;-----------------------------------------|
+            mov DL,CL       ; clone count into DL
+            and DL,3        ; eliminate bits 2-7
+            cmp DL,2        ; make sure it starts with 10
+            jnz drawBCont   ; if DL doesn't equal 10, stop testing
+            push AX         ;\
+            push BX         ; |- Save
+            push CX         ;/
+            mov DL,CL       ; clone count into DL
+            sub DL,2        ; subract 2 (this code SHOULD only run if CL is 2 6 or 10)
+            shr DX,1
+            shr DX,1        ; DL has now been divided by 4
+            and DL,3        ; remove first 2 bits (in case there was anything in DH)
+            call extractRow ; will place play pieces for this row
+            pop CX          ;\
+            pop BX          ; |- Restore
+            pop AX          ;/
+            add BX,16h      ; add 22 to address so we draw 3rd board design
+            ;-----------------------------------------|
+            ; play piece row determination finished   |
+            ;-----------------------------------------|
+
+drawBCont:  ;
+            ; now that we know which row to print, it's time to print it
+            ;
+            add BX,OFFSET board ; combine address of board layouts with offset
+            mov DX,0Bh          ; tell WriteText to print 11 characters
+            push CX             ; save count (CL)
+            push AX             ; save remaining pattern (AH)
+            call WriteText      ; call string output proc
+            mov DX,OFFSET CRLF  ; give Write address of CRLF so we get a new line
+            call Write          ; will output CRLF to the console
+            pop AX              ; get pattern back! (AH)
+            pop CX              ; get count back; (CL)
+            shr AH,1            ; shift pattern right, to get rid of previous pattern, and to see the next
+            dec CL              ; decrease count by one, since part of the board has now been drawn
+            jnz drawBLoop       ; draw another part of the board if count isn't 0, otherwise stop doing that!
+
+            ret
+drawBoard   ENDP
 ;---------------------------|
 ; Draw Board Procedure ENDS |
 ;---------------------------|
@@ -192,49 +201,63 @@ drawBoard ENDP
 ;  AL should be a value   |
 ;  from 0-8               |
 ;-------------------------|
-tryMove PROC
-  mov CX,0003         ; row = 0, and CL is 3 (for dividing later)
-  add AL,9            ; restore request to original value before carry test
-  mov DL,AL           ; temporarily store request
-  sub AL,6            ; if request is 6-8, we won't carry
-  jnc continueTryMove ; row is 0
-  add CH,1            ; row = 1
-  mov AL,DL           ; restore request
-  sub AL,3            ; if request is 3-5, we won't carry
-  jnc continueTryMove ; row is 1
-  add CH,1            ; row is 2
-continueTryMove:
-  mov AH,0            ; zero out upper register
-  mov AL,DL           ; restore request
-  div CL              ; divide request by 3
-  mov CL,AH           ; place request % 3 in CL
-  mov AX,1            ; set AX to 1 (_ _ X)
-tmColumn:
-  sub CL,1            ; decrement column
-  jc tmRow            ; if we underflow, our work is done
-  mov DX,AX           ; save AX in DX
-  shl AX,1            ; multiply AX by 2
-  add AX,DX           ; add DX to AX (thus multiplying by 3)
-  jmp tmColumn        ; try again
-tmRow:
-  sub CH,1            ; decrement row
-  jc tmDoneAlign      ; if we underflow, our work is done
-  mov DX,AX           ; save AX in DX
-  shl AX,5            ; shift to next row (5 bits)
-  jmp tmRow           ; try again
-tmDoneAlign:
-  mov DX,gameVars     ; copy gameVars to DX
-  and DX,1            ; remove all but LSB
-  mov CL,DL           ; get current player
-  shl AX,CL           ; if player is 1, then double the value that we'll add
-  xor DX,1            ; alternate LSB of DX (toggle player turn)
-  shl AX,1            ; shift our board addition left, so we don't modify current player
-  add AX,gameVars     ; add board data to temp board data
-  and AX,0FFFEh       ; zero out LSB
-  add AX,DX           ; if it's player 0's turn, nothing changes (we still add X) but if it's player 1's turn we add 1 (change to O)
-  mov gameVars,AX     ; commit to memory (update board data)
-  ret
-tryMove ENDP
+tryMove      PROC
+             mov CX,0003    ; row = 0, and CL is 3 (for dividing later)
+             add AL,9       ; restore request to original value before carry test
+             mov DL,AL      ; temporarily store request
+             sub AL,6       ; if request is 6-8, we won't carry
+             jnc tmContinue ; row is 0
+             add CH,1       ; row = 1
+             mov AL,DL      ; restore request
+             sub AL,3       ; if request is 3-5, we won't carry
+             jnc tmContinue ; row is 1
+             add CH,1       ; row is 2
+
+             ;
+             ; we found the row, so continue with the procedure
+             ;
+tmContinue:  mov AH,0  ; zero out upper register
+             mov AL,DL ; restore request
+             div CL    ; divide request by 3
+             mov CL,AH ; place request % 3 in CL
+             mov AX,1  ; set AX to 1 (_ _ X)
+
+             ;
+             ; here we move the pattern in AX to the correct column
+             ;
+tmColumn:    sub CL,1     ; decrement column
+             jc tmRow     ; if we underflow, our work is done
+             mov DX,AX    ; save AX in DX
+             shl AX,1     ; multiply AX by 2
+             add AX,DX    ; add DX to AX (thus multiplying by 3)
+             jmp tmColumn ; try again
+
+             ;
+             ; here we move the pattern in AX to the row we put in CH
+             ;
+tmRow:       sub CH,1       ; decrement row
+             jc tmDoneAlign ; if we underflow, our work is done
+             mov DX,AX      ; save AX in DX
+             shl AX,5       ; shift to next row (5 bits)
+             jmp tmRow      ; try again
+
+             ;
+             ; now, we have the correct pattern in AX that corresponds to the key pressed by the user
+             ; so we add that to the board
+             ;
+tmDoneAlign: mov DX,gameVars ; copy gameVars to DX
+             and DX,1        ; remove all but LSB
+             mov CL,DL       ; get current player
+             shl AX,CL       ; if player is 1, then double the value that we'll add
+             xor DX,1        ; alternate LSB of DX (toggle player turn)
+             shl AX,1        ; shift our board addition left, so we don't modify current player
+             add AX,gameVars ; add board data to temp board data
+             and AX,0FFFEh   ; zero out LSB
+             add AX,DX       ; if it's player 0's turn, nothing changes (we still add X) but if it's player 1's turn we add 1 (change to O)
+             mov gameVars,AX ; commit to memory (update board data)
+
+             ret
+tryMove      ENDP
 ;-------------------------|
 ; Try Move Procedure      |
 ;-------------------------|
@@ -242,46 +265,61 @@ tryMove ENDP
 ;----------------------------|
 ; Extract Row Procedure      |
 ;----------------------------|
-extractRow PROC
-  mov DH,DL       ; copy row (DL) to DH
-  shl DH,1        ; multiply row by 2
-  shl DH,1        ; multiply row by 2 (4)
-  add DH,DL       ; add DL to DH
-  mov CL,DH       ; place DH in CL, thus multiplying DL by 5 (CL = DL * 5)
+extractRow  PROC
+            ;
+            ; multiply requested row by 5 (remember each row takes 5 bits of memory)
+            ;
+            mov DH,DL ; copy row (DL) to DH
+            shl DH,1  ; multiply row by 2
+            shl DH,1  ; multiply row by 2 (4)
+            add DH,DL ; add DL to DH
+            mov CL,DH ; place DH in CL, thus multiplying DL by 5 (CL = DL * 5)
 
-  mov AX,gameVars ; retrieve game variables
-  shl AX,CL       ; move to correct row of piece data
-  shr AX,0Bh      ; move the 5 bits we need to the front
-  and AX,1Fh      ; remove bits 5-15, we only want 0-4
+            ;
+            ; get the requested row from memory
+            ;
+            mov AX,gameVars ; retrieve game variables
+            shl AX,CL       ; move to correct row of piece data
+            shr AX,0Bh      ; move the 5 bits we need to the front
+            and AX,1Fh      ; remove bits 5-15, we only want 0-4
 
-  mov CH,0        ; set iteration 0
+            ;
+            ; set columns in memory so board data is displayed
+            ;
+            mov CH,0        ; set iteration 0
+            ;
+            ; loop through the data
+            ;
+exRowIt:    inc CH               ; next iteration
+            mov CL,3             ; set CX to 3, so we can divide by 3
+            div CL               ; divide AX by 3 (store in AL, remainder in AH)
+            mov BX,OFFSET pieces ; get possible play pieces (address)
+            mov DX,0             ; zero out DX
+            mov DL,AH            ; get remainder (modulus) into DL
+            add BX,DX            ; add result of division
+            mov DL,[BX]          ; DL should now have a space, an X, or an O
+            mov BX,OFFSET board  ; get board address
+            add BX,13h           ; move to 3rd layout + 1 for first column, but we subtract 4 so the following loop works correctly
+            push CX              ; save iteration (we only need CH)
 
-exRowIt:
-  inc CH               ; next iteration
-  mov CL,3             ; set CX to 3, so we can divide by 3
-  div CL               ; divide AX by 3 (store in AL, remainder in AH)
-  mov BX,OFFSET pieces ; get possible play pieces (address)
-  mov DX,0             ; zero out DX
-  mov DL,AH            ; get remainder (modulus) into DL
-  add BX,DX            ; add result of division
-  mov DL,[BX]          ; DL should now have a space, an X, or an O
-  mov BX,OFFSET board  ; get board address
-  add BX,13h           ; move to 3rd layout + 1 for first column, but we subtract 4 so the following loop works correctly
-  push CX              ; save iteration (we only need CH)
+            ;
+            ; modify the correct column
+            ;
+exRowItCol: add BX,4          ; next column
+            dec CH            ; iteration - 1
+            jnz exRowItCol ; if this is zero, we're in the correct column
 
-exRowItColumn:
-  add BX,4          ; next column
-  dec CH            ; iteration - 1
-  jnz exRowItColumn ; if this is zero, we're in the correct column
+            ;
+            ; determine if we should change another column
+            ;
+            pop CX      ; load iteration (from CH)
+            cmp CH,3    ; check if we're on iteration 3
+            mov [BX],DL ; and now we place the character in DL, into the board area
+            mov AH,0    ; get rid of remainder, (so AX is divided by 3)
+            jnz exRowIt ; if CH is anything other than 3, we reiterate
 
-  pop CX      ; load iteration (from CH)
-  cmp CH,3    ; check if we're on iteration 3
-  mov [BX],DL ; and now we place the character in DL, into the board area
-  mov AH,0    ; get rid of remainder, (so AX is divided by 3)
-  jnz exRowIt ; if CH is anything other than 3, we reiterate
-
-  ret
-extractRow ENDP
+            ret
+extractRow  ENDP
 ;----------------------------|
 ; Extract Row Procedure      |
 ;----------------------------|
