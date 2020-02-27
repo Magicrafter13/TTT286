@@ -151,12 +151,6 @@ drawBFinish:
   and DL,3            ; eliminate bits 2-7
   cmp DL,2            ; make sure it starts with 10
   jnz determineFinish ; if DL doesn't equal 10, stop testing
-    ; ---- This should be enough, assuming CL is never greater than 11 (base 10)
-    ; mov DL,CL
-    ; shr DL
-    ; shr DL   ; DL = 000000??
-    ; cmp DL,3 ; if DL is 11, ZF will now eqaul 0
-    ; draw letters if zero flag is false
   push AX             ;\
   push BX             ; |- Save
   push CX             ;/
@@ -174,18 +168,18 @@ drawBFinish:
   ; play piece row determination finished   |
   ;-----------------------------------------|
 determineFinish:
-  add BX,OFFSET board; add OFFSET BOARD to register where string offset goes
-  mov DX,0Bh         ; mov 0Bh to a register (11), to represent the length of the strings
-  push CX            ; save count to stack (cannot push byte register), using CL
-  push AX            ; save remaining pattern to stack, using AH
-  call WriteText     ; call string output proc
-  mov DX,OFFSET CRLF ; load offset address of CRLF into DX
-  call Write         ; will output CRLF to the console
-  pop AX             ; get pattern back! (AH)
-  pop CX             ; get count back; (CL)
-  shr AH,1           ; shift pattern right, to get rid of previous pattern, and to see the next
-  dec CL             ; decrease count by one, since part of the board has now been drawn
-  jnz drawBLoop      ; draw another part of the board if count isn't 0, otherwise stop doing that!
+  add BX,OFFSET board ; add OFFSET BOARD to register where string offset goes
+  mov DX,0Bh          ; mov 0Bh to a register (11), to represent the length of the strings
+  push CX             ; save count to stack (cannot push byte register), using CL
+  push AX             ; save remaining pattern to stack, using AH
+  call WriteText      ; call string output proc
+  mov DX,OFFSET CRLF  ; load offset address of CRLF into DX
+  call Write          ; will output CRLF to the console
+  pop AX              ; get pattern back! (AH)
+  pop CX              ; get count back; (CL)
+  shr AH,1            ; shift pattern right, to get rid of previous pattern, and to see the next
+  dec CL              ; decrease count by one, since part of the board has now been drawn
+  jnz drawBLoop       ; draw another part of the board if count isn't 0, otherwise stop doing that!
   ret
 drawBoard ENDP
 ;---------------------------|
@@ -194,8 +188,11 @@ drawBoard ENDP
 
 ;-------------------------|
 ; Try Move Procedure      |
+;                         |
+;  AL should be a value   |
+;  from 0-8               |
 ;-------------------------|
-tryMove PROC                ; AL should contain a value from 0-8
+tryMove PROC
   mov CX,0003         ; row = 0, and CL is 3 (for dividing later)
   add AL,9            ; restore request to original value before carry test
   mov DL,AL           ; temporarily store request
@@ -246,41 +243,41 @@ tryMove ENDP
 ; Extract Row Procedure      |
 ;----------------------------|
 extractRow PROC
-  mov DH,DL ; copy row (DL) to DH
-  shl DH,1 ; multiply row by 2
-  shl DH,1 ; multiply row by 2 (4)
-  add DH,DL ; add DL to DH
-  mov CL,DH ; place DH in CL, thus multiplying DL by 5 (CL = DL * 5)
+  mov DH,DL       ; copy row (DL) to DH
+  shl DH,1        ; multiply row by 2
+  shl DH,1        ; multiply row by 2 (4)
+  add DH,DL       ; add DL to DH
+  mov CL,DH       ; place DH in CL, thus multiplying DL by 5 (CL = DL * 5)
 
   mov AX,gameVars ; retrieve game variables
-  shl AX,CL ; move to correct row of piece data
-  shr AX,0Bh ; move the 5 bits we need to the front
-  and AX,1Fh ; remove bits 5-15, we only want 0-4
+  shl AX,CL       ; move to correct row of piece data
+  shr AX,0Bh      ; move the 5 bits we need to the front
+  and AX,1Fh      ; remove bits 5-15, we only want 0-4
 
-  mov CH,0 ; set iteration 0
+  mov CH,0        ; set iteration 0
 
 exRowIt:
-  inc CH ; next iteration
-  mov CL,3 ; set CX to 3, so we can divide by 3
-  div CL ; divide AX by 3 (store in AL, remainder in AH)
+  inc CH               ; next iteration
+  mov CL,3             ; set CX to 3, so we can divide by 3
+  div CL               ; divide AX by 3 (store in AL, remainder in AH)
   mov BX,OFFSET pieces ; get possible play pieces (address)
-  mov DX,0 ; zero out DX
-  mov DL,AH ; get remainder (modulus) into DL
-  add BX,DX ; add result of division
-  mov DL,[BX] ; DL should now have a space, an X, or an O
-  mov BX,OFFSET board ; get board address
-  add BX,13h ; move to 3rd layout + 1 for first column, but we subtract 4 so the following loop works correctly
-  push CX ; save iteration (we only need CH)
+  mov DX,0             ; zero out DX
+  mov DL,AH            ; get remainder (modulus) into DL
+  add BX,DX            ; add result of division
+  mov DL,[BX]          ; DL should now have a space, an X, or an O
+  mov BX,OFFSET board  ; get board address
+  add BX,13h           ; move to 3rd layout + 1 for first column, but we subtract 4 so the following loop works correctly
+  push CX              ; save iteration (we only need CH)
 
 exRowItColumn:
-  add BX,4 ; next column
-  dec CH ; iteration - 1
+  add BX,4          ; next column
+  dec CH            ; iteration - 1
   jnz exRowItColumn ; if this is zero, we're in the correct column
 
-  pop CX ; load iteration (from CH)
-  cmp CH,3 ; check if we're on iteration 3
+  pop CX      ; load iteration (from CH)
+  cmp CH,3    ; check if we're on iteration 3
   mov [BX],DL ; and now we place the character in DL, into the board area
-  mov AH,0 ; get rid of remainder, (so AX is divided by 3)
+  mov AH,0    ; get rid of remainder, (so AX is divided by 3)
   jnz exRowIt ; if CH is anything other than 3, we reiterate
 
   ret
