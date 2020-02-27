@@ -111,6 +111,7 @@ InitGame:
     sub AL,31h     ; ascii for 1 is 31h, so turn that into a 0
     sub AL,9       ; now subtract 9, that way if it is 0-8 we will trigger the carry flag
     jnc noTryMove  ; if they did not input 1-9, then don't try anything (continue)
+    add AL,9       ; restore request to original value before passing to tryMove
     call tryMove   ; attempt the requested move, if it is valid, the board will be updated, and the player will change
   noTryMove:
 
@@ -203,7 +204,6 @@ drawBoard   ENDP
 ;-------------------------|
 tryMove      PROC
              mov CX,0003    ; row = 0, and CL is 3 (for dividing later)
-             add AL,9       ; restore request to original value before carry test
              mov DL,AL      ; temporarily store request
              sub AL,6       ; if request is 6-8, we won't carry
              jnc tmContinue ; row is 0
