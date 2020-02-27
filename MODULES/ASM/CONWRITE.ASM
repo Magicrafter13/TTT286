@@ -1,13 +1,14 @@
 ;
 ; Console Write - Assembly Module, by Matthew Rease
-;   Write to the screen via DOS service 'Print String' (09h).
+;   Various string printing utilities, using either DOS or BIOS interrupts
 ;
 
 ;------------------|
 ;    DATA BEGIN    |
 ;------------------|
 MyData SEGMENT PUBLIC
-       EXTRN CRLF:BYTE ; Allows access to CRLF Variable
+       PUBLIC CRLF            ; Allow CRLF to be accessed globally
+       CRLF    DB 0Dh,0Ah,'$' ; EOL String
 MyData ENDS
 ;------------------|
 ;    DATA END      |
