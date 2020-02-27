@@ -25,15 +25,12 @@ DemoStack ENDS
 MyData    SEGMENT PUBLIC
           PUBLIC CRLF
 moveText  DB "Your move, ",'$'
-; 9D06 = 10011 10100 00011 0
-; D6B4 = 11010 11010 11010 0
-gameVars  DW 94C6h                               ; lsb is the current player (0 = x, 1 = y), bits 1-15 are board layout (5 bits per row)
+gameVars  DW 0                                   ; lsb is the current player (0 = x, 1 = y), bits 1-15 are board layout (5 bits per row)
 board     DB "   ³   ³   ÄÄÄÅÄÄÄÅÄÄÄ ! ³ ! ³ ! " ; building blocks of the game board
 pieces    DB " XO"                               ; possible pieces to place on board
 pattern   DB 88h                                 ; takes the binary form of 10001000, which, if shifted right, will let me draw board chunk 0,0,0,1,0,0,0,1,0,0,0 while only using 1 byte for the pattern
 CRLF      DB 0Dh,0Ah,'$'                         ; EOL String
 
-Adapter   DB "X",'$'
 Numbers   DB "0123456789"
 
 MyData    ENDS
@@ -50,6 +47,7 @@ MyCode SEGMENT PUBLIC
 
   EXTRN Write:PROC
   EXTRN WriteLn:PROC
+  EXTRN WriteText:PROC
 
 ;------------------------|
 ;    Main Procedure      |
@@ -171,7 +169,7 @@ determineFinish:
   mov DX,0Bh         ; mov 0Bh to a register (11), to represent the length of the strings
   push CX            ; save count to stack (cannot push byte register), using CL
   push AX            ; save remaining pattern to stack, using AH
-  call writeText     ; call string output proc
+  call WriteText     ; call string output proc
   mov DX,OFFSET CRLF ; load offset address of CRLF into DX
   call Write         ; will output CRLF to the console
   pop AX             ; get pattern back! (AH)
@@ -281,46 +279,6 @@ extractRow ENDP
 ;----------------------------|
 ; Extract Row Procedure      |
 ;----------------------------|
-
-;---------------------------|
-; Write Text Prodecure      |
-;                           |
-; Requires BX to be address |
-; of first character, and DX|
-; to be length of string.   |
-;                           |
-; This procedure was written|
-; in 60-90 minutes, on a    |
-; school day in college,    |
-; after I'd taken a long    |
-; break.                    |
-;---------------------------|
-writeText PROC ; Define text writing procedure
-  mov CX,0      ; set CX to 0
-writeLoop:
-  push BX       ; save string address
-  mov AH,0Eh    ; function 0E, output char to screen
-  add BX,CX     ; add char offset to BX
-  mov AL,[BX]   ; place character at DS:BX in AL
-
-  push DX       ; save length
-  push CX       ; save current char
-
-  mov BX,0      ; set BX to 0
-  int 10h       ; call BIOS function 0E
-
-  pop CX        ; restore current char
-  pop DX        ; restore length
-  pop BX        ; restore string address
-
-  inc CX        ; increment char by 1
-  cmp DX,CX     ; compare length to current char
-  jnz writeLoop ; continue writing if current char hasn't reached length
-  ret
-writeText ENDP
-;---------------------------|
-; Write Text Prodecure ENDS |
-;---------------------------|
 
 MyCode ENDS
 ;-------------------|
