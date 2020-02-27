@@ -1,0 +1,17 @@
+;
+; Macro library containing very small snippets of code.
+; For use with x86 assembly. By Matthew Rease.
+;
+
+;
+; EXIT - Closes program and sets errorlevel.
+; Last Update: 9/22/2019
+;
+;   Caller must pass:
+;   errlvl: single byte value representation of errorlevel to give DOS.
+;
+EXIT  MACRO errlvl
+      mov AH,4Ch    ; DOS service: Terminate process
+      mov AL,errlvl ; DOS will set ERRORLEVEL to AL (errlvl)
+      int 21h       ; Call DOS (return to DOS)
+      ENDM

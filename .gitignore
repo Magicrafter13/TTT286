@@ -1,0 +1,10 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/A
+/MASM
+/TTT286
+/COMPTEST.BAT
+*.EXE
+*.OBJ
