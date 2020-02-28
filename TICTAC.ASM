@@ -202,62 +202,54 @@ drawBoard   ENDP
 ;  AL should be a value   |
 ;  from 0-8               |
 ;-------------------------|
-tryMove      PROC
-             mov CX,0003    ; row = 0, and CL is 3 (for dividing later)
-             mov DL,AL      ; temporarily store request
-             sub AL,6       ; if request is 6-8, we won't carry
-             jnc tmContinue ; row is 0
-             add CH,1       ; row = 1
-             mov AL,DL      ; restore request
-             sub AL,3       ; if request is 3-5, we won't carry
-             jnc tmContinue ; row is 1
-             add CH,1       ; row is 2
-
-             ;
-             ; we found the row, so continue with the procedure
-             ;
-tmContinue:  mov AH,0  ; zero out upper register
-             mov AL,DL ; restore request
-             div CL    ; divide request by 3
-             mov CL,AH ; place request % 3 in CL
-             mov AX,1  ; set AX to 1 (_ _ X)
-
-             ;
-             ; here we move the pattern in AX to the correct column
-             ;
-tmColumn:    sub CL,1     ; decrement column
-             jc tmRow     ; if we underflow, our work is done
-             mov DX,AX    ; save AX in DX
-             shl AX,1     ; multiply AX by 2
-             add AX,DX    ; add DX to AX (thus multiplying by 3)
-             jmp tmColumn ; try again
-
-             ;
-             ; here we move the pattern in AX to the row we put in CH
-             ;
-tmRow:       sub CH,1       ; decrement row
-             jc tmDoneAlign ; if we underflow, our work is done
-             mov DX,AX      ; save AX in DX
-             shl AX,5       ; shift to next row (5 bits)
-             jmp tmRow      ; try again
-
-             ;
-             ; now, we have the correct pattern in AX that corresponds to the key pressed by the user
-             ; so we add that to the board
-             ;
-tmDoneAlign: mov DX,gameVars ; copy gameVars to DX
-             and DX,1        ; remove all but LSB
-             mov CL,DL       ; get current player
-             shl AX,CL       ; if player is 1, then double the value that we'll add
-             xor DX,1        ; alternate LSB of DX (toggle player turn)
-             shl AX,1        ; shift our board addition left, so we don't modify current player
-             add AX,gameVars ; add board data to temp board data
-             and AX,0FFFEh   ; zero out LSB
-             add AX,DX       ; if it's player 0's turn, nothing changes (we still add X) but if it's player 1's turn we add 1 (change to O)
-             mov gameVars,AX ; commit to memory (update board data)
-
-             ret
-tryMove      ENDP
+tryMove    PROC
+           mov AH,0 ; 0 out upper register
+           mov CL,3 ; will divide by 3
+           div CL ; divide AX(L) by 3
+           ; AX = column row
+           mov DH,AL
+           mov DL,AH ; swap low and high, and place in DX
+           ; DX = row column
+           mov CL,2 ; CL = 2
+           sub CL,DH ; CL - row
+           mov DH,CL ; row is now inverted (2 = 0, 1 = 1, 0 = 2)
+           mov AX,gameVars ; get board data
+           shr AX,1 ; remove player
+           mov CL,DH ; place row in CL
+           shr AX,CL
+           shr AX,CL
+           shr AX,CL
+           shr AX,CL
+           shr AX,CL ; eliminate CL * 5 bits
+           and AX,1Fh ; eliminate bits 5-15
+           push DX ; backup DX
+           call getColumn ; now DL = 0 1 or 2 (_ X or O)
+           pop CX ; restore DX into CX
+           cmp DL,0 ; test if column is empty
+           jnz ending ; if it isn't, then don't do anything
+           mov AX,1 ; place _ _ X in AX
+           mov DX,gameVars ; get current game data
+           and DX,1 ; determine current player
+           jz tmColumn ; time to adjust the new piece to the proper column
+           add AX,1    ; increase the pattern we add by 1 (changing the X to an O)
+tmColumn:  cmp CL,0    ; see if column is 0
+           jz tmRow    ; time to adjust the new piece to the proper row
+           mov BX,AX ; temp store AX in BX
+           shl AX,1 ; now to position row
+           add AX,BX ; multiply AX by 3
+           dec CL ; column -= 1
+           jmp tmColumn ; loop
+tmRow:     cmp CH,0 ; see if row is 0
+           jz loopsDone ; we're done
+           shl AX,5 ; move to next row
+           dec CH ; row -= 1
+           jmp tmRow ; loop
+tmDonePos: shl AX,1 ; make room for player
+           add AX,gameVars ; update board
+           xor AX,1 ; XOR LSB, which will change current player
+           mov gameVars,AX ; commit to memory
+tmFinish:  ret
+tryMove    ENDP
 ;-------------------------|
 ; Try Move Procedure      |
 ;-------------------------|
@@ -291,7 +283,7 @@ extractRow  PROC
             ; loop through the data
             ;
 exRowIt:    inc CH               ; next iteration
-            mov CL,3             ; set CX to 3, so we can divide by 3
+            mov CL,3             ; set CL to 3, so we can divide by 3
             div CL               ; divide AX by 3 (store in AL, remainder in AH)
             mov BX,OFFSET pieces ; get possible play pieces (address)
             mov DX,0             ; zero out DX
@@ -323,6 +315,29 @@ extractRow  ENDP
 ;----------------------------|
 ; Extract Row Procedure      |
 ;----------------------------|
+
+;---------------------------|
+; Get Column Procedure      |
+;   Place row data in AX    |
+;   and column in DL (1-3)  |
+; column will be returned   |
+; in DL                     |
+;---------------------------|
+getColumn PROC
+          mov CH,0FFh ; set iteration 0
+gcLoop:   inc CH      ; increment iteration
+          mov AH,0    ; clear out possible remainder from previous iteration
+          mov CL,3
+          div CL      ; divide board in AX by 3
+          cmp CH,DL   ; compare current column to requested column
+          jnz gcLoop  ; if we haven't reached the column we want, try again
+          mov DL,AH   ; store value of column in DL
+
+          ret
+getColumn ENDP
+;---------------------------|
+; Get Column Procedure ENDS |
+;---------------------------|
 
 MyCode ENDS
 ;-------------------|
