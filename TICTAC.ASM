@@ -29,7 +29,7 @@ EXTRN CRLF:BYTE
 moveText  DB "Your move, ",'$'
 copyright DB "(c) 2020 - Matthew Rease",'$'
 thanks    DB "Thanks for playing!",'$'
-gameVars  DW 0FFFFh                                   ; lsb is the current player (0 = x, 1 = y), bits 1-15 are board layout (5 bits per row)
+gameVars  DW 0                                   ; lsb is the current player (0 = x, 1 = y), bits 1-15 are board layout (5 bits per row)
 board     DB "   ³   ³   ÄÄÄÅÄÄÄÅÄÄÄ ! ³ ! ³ ! " ; building blocks of the game board
 pieces    DB " XO"                               ; possible pieces to place on board
 pattern   DB 88h                                 ; takes the binary form of 10001000, which, if shifted right,
@@ -69,13 +69,10 @@ start:
 
 InitGame:
   ; ---------- initialize game
-  mov gameVars,0
-  ;mov  AX,0               ; set AX to 0, for use in "refreshing" variables in memory
-  ;mov  BX,OFFSET gameVars ; load memory offset of gameVars into BX
-  ;mov  [BX],AX            ; sets word at DS:BX to 0
+  mov gameVars,0 ; refresh variables
 
-  mov AX,3                ; video function 0 set video mode, mode 3
-  int 10h                 ; call BIOS video
+  mov AX,3       ; video function 0 set video mode, mode 3
+  int 10h        ; call BIOS video
 
   startGameLoop:
     ; ---------- clear screen
