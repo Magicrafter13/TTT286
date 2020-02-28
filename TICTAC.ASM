@@ -29,7 +29,7 @@ EXTRN CRLF:BYTE
 moveText  DB "Your move, ",'$'
 copyright DB "(c) 2020 - Matthew Rease",'$'
 thanks    DB "Thanks for playing!",'$'
-gameVars  DW 0                                   ; lsb is the current player (0 = x, 1 = y), bits 1-15 are board layout (5 bits per row)
+gameVars  DW 0FFFFh                                   ; lsb is the current player (0 = x, 1 = y), bits 1-15 are board layout (5 bits per row)
 board     DB "   ³   ³   ÄÄÄÅÄÄÄÅÄÄÄ ! ³ ! ³ ! " ; building blocks of the game board
 pieces    DB " XO"                               ; possible pieces to place on board
 pattern   DB 88h                                 ; takes the binary form of 10001000, which, if shifted right,
@@ -69,9 +69,10 @@ start:
 
 InitGame:
   ; ---------- initialize game
-  mov  AX,0               ; set AX to 0, for use in "refreshing" variables in memory
-  mov  BX,OFFSET gameVars ; load memory offset of gameVars into BX
-  mov  [BX],AX            ; sets word at DS:BX to 0
+  mov gameVars,0
+  ;mov  AX,0               ; set AX to 0, for use in "refreshing" variables in memory
+  ;mov  BX,OFFSET gameVars ; load memory offset of gameVars into BX
+  ;mov  [BX],AX            ; sets word at DS:BX to 0
 
   mov AX,3                ; video function 0 set video mode, mode 3
   int 10h                 ; call BIOS video
@@ -232,7 +233,7 @@ tryMove    PROC
            call getColumn  ; now DL = 0 1 or 2 (_ X or O)
            pop CX          ; restore DX into CX
            cmp DL,0        ; test if column is empty
-           jnz ending      ; if it isn't, then don't do anything
+           jnz tmFinish    ; if it isn't, then don't do anything
            ;
            ; construct mask to add to board data
            ;
@@ -249,7 +250,7 @@ tmColumn:  cmp CL,0        ; see if column is 0
            dec CL          ; column -= 1
            jmp tmColumn    ; loop
 tmRow:     cmp CH,0        ; see if row is 0
-           jz loopsDone    ; we're done
+           jz tmDonePos    ; we're done
            shl AX,5        ; move to next row
            dec CH          ; row -= 1
            jmp tmRow       ; loop
