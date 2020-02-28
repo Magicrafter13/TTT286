@@ -203,50 +203,62 @@ drawBoard   ENDP
 ;  from 0-8               |
 ;-------------------------|
 tryMove    PROC
-           mov AH,0 ; 0 out upper register
-           mov CL,3 ; will divide by 3
-           div CL ; divide AX(L) by 3
-           ; AX = column row
-           mov DH,AL
-           mov DL,AH ; swap low and high, and place in DX
-           ; DX = row column
-           mov CL,2 ; CL = 2
+           ;
+           ; determine which row and column to modify
+           ;
+           mov AH,0  ; 0 out upper register
+           mov CL,3  ; will divide by 3
+           div CL    ; divide AX(L) by 3
+                     ; AX = column row
+           mov DH,AL ; swap low -
+           mov DL,AH ; - and high, and place in DX
+                     ; DX = row column
+           mov CL,2  ; CL = 2
            sub CL,DH ; CL - row
            mov DH,CL ; row is now inverted (2 = 0, 1 = 1, 0 = 2)
+           ;
+           ; find out if we're allowed to modify this part of the board
+           ;
            mov AX,gameVars ; get board data
-           shr AX,1 ; remove player
-           mov CL,DH ; place row in CL
+           shr AX,1        ; remove player
+           mov CL,DH       ; place row in CL
            shr AX,CL
            shr AX,CL
            shr AX,CL
            shr AX,CL
-           shr AX,CL ; eliminate CL * 5 bits
-           and AX,1Fh ; eliminate bits 5-15
-           push DX ; backup DX
-           call getColumn ; now DL = 0 1 or 2 (_ X or O)
-           pop CX ; restore DX into CX
-           cmp DL,0 ; test if column is empty
-           jnz ending ; if it isn't, then don't do anything
-           mov AX,1 ; place _ _ X in AX
+           shr AX,CL       ; eliminate CL * 5 bits
+           and AX,1Fh      ; eliminate bits 5-15
+           push DX         ; backup DX
+           call getColumn  ; now DL = 0 1 or 2 (_ X or O)
+           pop CX          ; restore DX into CX
+           cmp DL,0        ; test if column is empty
+           jnz ending      ; if it isn't, then don't do anything
+           ;
+           ; construct mask to add to board data
+           ;
+           mov AX,1        ; place _ _ X in AX
            mov DX,gameVars ; get current game data
-           and DX,1 ; determine current player
-           jz tmColumn ; time to adjust the new piece to the proper column
-           add AX,1    ; increase the pattern we add by 1 (changing the X to an O)
-tmColumn:  cmp CL,0    ; see if column is 0
-           jz tmRow    ; time to adjust the new piece to the proper row
-           mov BX,AX ; temp store AX in BX
-           shl AX,1 ; now to position row
-           add AX,BX ; multiply AX by 3
-           dec CL ; column -= 1
-           jmp tmColumn ; loop
-tmRow:     cmp CH,0 ; see if row is 0
-           jz loopsDone ; we're done
-           shl AX,5 ; move to next row
-           dec CH ; row -= 1
-           jmp tmRow ; loop
-tmDonePos: shl AX,1 ; make room for player
+           and DX,1        ; determine current player
+           jz tmColumn     ; time to adjust the new piece to the proper column
+           add AX,1        ; increase the pattern we add by 1 (changing the X to an O)
+tmColumn:  cmp CL,0        ; see if column is 0
+           jz tmRow        ; time to adjust the new piece to the proper row
+           mov BX,AX       ; temp store AX in BX
+           shl AX,1        ; now to position row
+           add AX,BX       ; multiply AX by 3
+           dec CL          ; column -= 1
+           jmp tmColumn    ; loop
+tmRow:     cmp CH,0        ; see if row is 0
+           jz loopsDone    ; we're done
+           shl AX,5        ; move to next row
+           dec CH          ; row -= 1
+           jmp tmRow       ; loop
+           ;
+           ; add constructed mask to board data
+           ;
+tmDonePos: shl AX,1        ; make room for player
            add AX,gameVars ; update board
-           xor AX,1 ; XOR LSB, which will change current player
+           xor AX,1        ; XOR LSB, which will change current player
            mov gameVars,AX ; commit to memory
 tmFinish:  ret
 tryMove    ENDP
