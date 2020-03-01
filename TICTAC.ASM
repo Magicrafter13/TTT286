@@ -29,6 +29,7 @@ EXTRN CRLF:BYTE
 moveText  DB "Your move, ",'$'
 copyright DB "(c) 2020 - Matthew Rease",'$'
 thanks    DB "Thanks for playing!",'$'
+congrats  DB " Wins the game!",'$'
 gameVars  DW 0                                   ; lsb is the current player (0 = x, 1 = y), bits 1-15 are board layout (5 bits per row)
 board     DB "   ³   ³   ÄÄÄÅÄÄÄÅÄÄÄ ! ³ ! ³ ! " ; building blocks of the game board
 pieces    DB " XO"                               ; possible pieces to place on board
@@ -95,7 +96,22 @@ InitGame:
 
     call drawBoard
 
+    ; ---------- if someone won, print congratulatory text
+    cmp gameVars,0FFFEh ; see if a winner was found
+    jb userInput        ; if that number is greater than the board data, then there is no winner yet
+    mov AX,gameVars     ; set AX to 1
+    and AX,1            ; only want LSB
+    xor AX,1            ; toggle player
+    add AX,1            ; increase by one that way we get X or O, instead of space or X
+    lea BX,pieces       ; get player characters
+    add BX,AX           ; offset to X or O
+    mov DX,1            ; string length of 1
+    call WriteText      ; print player character to screen
+    lea DX,congrats     ; load win text
+    call WriteLn        ; print to screen
+
     ; ---------- get user input
+  userInput:
     mov AH,7       ; DOS function 07, get single character from keyboard (no echo)
     int 21h        ; Call DOS
 
@@ -107,9 +123,8 @@ InitGame:
     jz InitGame    ; restarts game
 
     sub AL,31h     ; ascii for 1 is 31h, so turn that into a 0
-    sub AL,9       ; now subtract 9, that way if it is 0-8 we will trigger the carry flag
+    cmp AL,9       ; now subtract 9, that way if it is 0-8 we will trigger the carry flag
     jnc noTryMove  ; if they did not input 1-9, then don't try anything (continue)
-    add AL,9       ; restore request to original value before passing to tryMove
     call tryMove   ; attempt the requested move, if it is valid, the board will be updated, and the player will change
   noTryMove:
 
@@ -208,12 +223,11 @@ tryMove    PROC
            mov CL,3  ; will divide by 3
            div CL    ; divide AX(L) by 3
                      ; AX = column row
-           mov DH,AL ; swap low -
-           mov DL,AH ; - and high, and place in DX
-                     ; DX = row column
+           mov DL,AH ; place high in low
            mov CL,2  ; CL = 2
-           sub CL,DH ; CL - row
+           sub CL,AL ; CL - row
            mov DH,CL ; row is now inverted (2 = 0, 1 = 1, 0 = 2)
+                     ; DX = row column
            ;
            ; find out if we're allowed to modify this part of the board
            ;
@@ -231,6 +245,7 @@ tryMove    PROC
            pop CX          ; restore DX into CX
            cmp DL,0        ; test if column is empty
            jnz tmFinish    ; if it isn't, then don't do anything
+           push CX         ; store column and row data for win testing later
            ;
            ; construct mask to add to board data
            ;
@@ -255,14 +270,84 @@ tmRow:     cmp CH,0        ; see if row is 0
            ; add constructed mask to board data
            ;
 tmDonePos: shl AX,1        ; make room for player
-           add AX,gameVars ; update board
-           xor AX,1        ; XOR LSB, which will change current player
-           mov gameVars,AX ; commit to memory
+           add gameVars,AX ; update board and commit to memory
+           pop CX          ; get column and row data for easy win testing
+           call testWin    ; if we've gotten this far, that means the board has changed, so lets check if the player has won
+           xor gameVars,1  ; XOR LSB, which will change current player
 tmFinish:  ret
 tryMove    ENDP
 ;-------------------------|
 ; Try Move Procedure      |
 ;-------------------------|
+
+;-----------------------------|
+; Test for Win Procedure      |
+;                             |
+;   CH - row, CL - column     |
+;-----------------------------|
+testWin PROC
+;
+; swap row and column
+;
+mov DX,CX ; place row,column in DX
+mov CH,DL ; so we can swap
+mov CL,DH ; the row and column
+;
+; test 1 - win by row
+;
+mov AX,gameVars ; get current game data
+mov DX,AX ; copy data into DX
+shr AX,1 ; remove player from data
+shr AX,CL
+shr AX,CL
+shr AX,CL
+shr AX,CL
+shr AX,CL ; AX has been divided by CL * 5
+and AX,1Fh ; isolate row
+mov BX,DX ; get board data into BX
+and BX,1 ; test which player just played (remember, if it was 0, the data will now be 1 and visa versa)
+jz twContinue ; if it was X, then continue
+shr AX,1 ; now we've divided by 2 (since O made the move, now O O O will become X X X)
+twContinue: cmp AX,0Dh ; check if row is X X X
+jz twWin ; if it is, then they've won
+;
+; test 2 - win by column
+;
+mov BX,0 ; iteration 0
+shr DX,1 ; remove player from data
+twTest2: mov AX,DX ; place data in AX
+and AX,1Fh ; only want first 5 bits
+push DX ; save board data
+push CX ; save column,row
+mov DL,CH ; set column for procedure
+call getColumn ; we need to find out if this column contains the player's piece
+pop CX ; load column,row
+pop DX ; load board data
+shr DX,5 ; next row
+push CX ; save column,row
+mov CX,gameVars ; test for X
+and CL,1 ; player data only
+add CL,1 ; add one (since a 0 1 and 2 from getColumn represent nothing, X, and O respectively)
+mov AL,CL ; place in AL
+pop CX ; load column,row
+cmp AH,AL ; test if column has an X in it
+jnz twTest3 ; if not, final test
+inc BX ; next iteration
+cmp BX,3 ; test iteration
+jz twWin ; if we've reached 3, we have a winner
+jmp twTest2 ; loop
+;
+; test 3 - win by diagonal
+;
+twTest3: jmp twEnd ; no winner yet :(
+twWin: mov AX,gameVars ; get game data
+or AX,0FFFEh ; set bits 1-15 to 1 (not possible during normal gameplay)
+mov gameVars,AX ; commit to memory
+twEnd: ret
+testWin ENDP
+;-----------------------------|
+; Test for Win Procedure      |
+;-----------------------------|
 
 ;----------------------------|
 ; Extract Row Procedure      |
