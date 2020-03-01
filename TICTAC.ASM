@@ -339,7 +339,78 @@ jmp twTest2 ; loop
 ;
 ; test 3 - win by diagonal
 ;
-twTest3: jmp twEnd ; no winner yet :(
+twTest3: cmp CL,1 ; check if play was in middle row
+jz twTest4 ; if so, check if play was in middle of board
+mov BL,0 ; iteration 0
+mov DH,1 ; each iteration, we will add 1 to the column
+cmp CH,0 ; test column 0
+jz twTest31 ; if it is, we're fine
+mov DH,0FFh ; otherwise we'll want to "subtract 1" from the column
+twTest31: mov DL, 0 ; each iteration, we will add 1 to the row
+cmp CL,0 ; test row 0
+jz twTest32 ; if it is, we're fine
+mov DL,0FFh ; otherwise we'll want to "subract 1" from the row
+twTest32: cmp BL,3 ; check if we've reached the end of our loop
+jz twWin ; if we have, then they must have won
+mov AX,gameVars ; get game data
+shr AX,1 ; remove player
+shr AX,CL
+shr AX,CL
+shr AX,CL
+shr AX,CL
+shr AX,CL ; get proper row
+and AX,1Fh ; and ONLY that row
+push CX ; backup column,row
+push DX ; backup column,row direction
+mov DL,CH
+call getColumn ; find out what's there
+mov DX,gameVars ; get game data
+and DX,1 ; isolate player
+add DX,1 ; increase by one so we can compare to getColumn
+cmp AH,DL ; check if it contained the proper piece
+pop DX ; restore column,row direction
+pop CX ; restore column,row
+jnz twEnd ; if not, then they didn't win yet
+add CL,DL ; this will add (or subtract) 1 row, based on the previous tests
+add CH,DH ; this will add (or subtract) 1 column, based on the previous tests
+inc BL ; next iteration
+jmp twTest32 ; if we haven't, then keep going
+;
+; test 4 - diagonal win, center play
+;
+twTest4: cmp CH,1 ; check if play was in middle column
+jnz twEnd ; if not, then they couldn't have made a winning move (after having tested row and column of course)
+mov AX,gameVars ; get game data
+mov BX,AX ; copy into BX
+and BX,1 ; player only
+inc BX ; 1 = X 2 = O
+shr AX,1 ; remove player
+and AX,1Fh ; get row 0
+mov DL,0 ; column 0
+call getColumn
+cmp DL,BL ; see if 0,0 is owned by this player
+jnz twTest4R ; if it isn't, try going right to left
+mov AX,gameVars ; get game data
+shr AX,11 ; get row 2
+mov DL,2 ; column 2
+call getColumn
+cmp DL,BL ; see if 2,2 is owned by this player
+jz twWin ; if it is, they win
+jmp twEnd ; otherwise, keep playing...
+twTest4R: mov AX,gameVars ; get game data
+shr AX,1 ; remove player
+and AX,1Fh ; get row 0
+mov DL,2 ; column 2
+call getColumn
+cmp DL,BL ; see if 2,0 is owned by this player
+jnz twEnd ; if it isn't, keep playing...
+mov AX,gameVars ; get game data
+shr AX,11 ; get row 2
+mov DL,0 ; column 0
+call getColumn
+cmp DL,BL ; see if 0,2 is owned by this player
+jz twWin ; if it is, they win
+jmp twEnd ; otherwise, keep playing...
 twWin: mov AX,gameVars ; get game data
 or AX,0FFFEh ; set bits 1-15 to 1 (not possible during normal gameplay)
 mov gameVars,AX ; commit to memory
