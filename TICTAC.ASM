@@ -78,7 +78,6 @@ InitGame:
   jz startGameLoop  ; if no winner was set, continue game
   mov AL,[pieces+3] ; get winner
   and AX,1          ; remove potential 2nd bit
-  xor AX,1          ; change player
   mov gameVars,AX   ; set player
   mov [pieces+3],0  ; unset winner
 
@@ -120,10 +119,8 @@ InitGame:
 
     sub AL,31h       ; ascii for 1 is 31h, so turn that into a 0
     cmp AL,9         ; now subtract 9, that way if it is 0-8 we will trigger the carry flag
-    jnc noTryMove    ; if they did not input 1-9, then don't try anything (continue)
+    jnc userInput    ; if they did not input 1-9, then don't try anything (continue)
     call tryMove     ; attempt the requested move, if it is valid, the board will be updated, and the player will change
-  noTryMove:
-
     jmp startGameLoop ; refresh screen
   endGameLoop:
 
@@ -414,13 +411,13 @@ twTest4R:   mov AX,gameVars ; get game data
 twWin:      mov AX,gameVars     ; get data
             and AX,1            ; only want LSB
             add AX,1            ; increase by one that way we get X or O, instead of space or X
+            mov [pieces+3],AL   ; set winner
             lea BX,pieces       ; get player characters
             add BX,AX           ; offset to X or O
             mov DX,1            ; string length of 1
             call WriteText      ; print player character to screen
             lea DX,congrats     ; load win text
             call WriteLn        ; print to screen
-            mov [pieces+3],AL   ; set winner
 twEnd:      ret
 testWin     ENDP
 ;-----------------------------|
