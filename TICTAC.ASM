@@ -286,7 +286,7 @@ testWin     PROC
             ; test 1 - win by row
             ;
             mov AX,gameVars ; get current game data
-            mov DX,AX       ; copy data into DX
+            mov DX,AX       ; copy data into DX (the less we call RAM, the faster we ride)
             shr AX,1        ; remove player from data
             shr AX,CL
             shr AX,CL
@@ -294,12 +294,11 @@ testWin     PROC
             shr AX,CL
             shr AX,CL       ; AX has been divided by CL * 5
             and AX,1Fh      ; isolate row
-            mov BX,DX       ; get board data into BX
-            and BX,1        ; test which player just played (remember, if it was 0, the data will now be 1 and visa versa)
+            test DX,1       ; test which player just played
             jz twContinue   ; if it was X, then continue
             shr AX,1        ; now we've divided by 2 (since O made the move, now O O O will become X X X)
 twContinue: cmp AX,0Dh      ; check if row is X X X
-            jz twWin        ; if it is, then they've won
+            je twWin        ; if it is, then they've won
             ;
             ; test 2 - win by column
             ;
@@ -307,30 +306,28 @@ twContinue: cmp AX,0Dh      ; check if row is X X X
             shr DX,1        ; remove player from data
 twTest2:    mov AX,DX       ; place data in AX
             and AX,1Fh      ; only want first 5 bits
-            push DX         ; save board data
             push CX         ; save column,row
+            push DX         ; save board data
             mov DL,CH       ; set column for procedure
             call getColumn  ; we need to find out if this column contains the player's piece
-            pop CX          ; load column,row
             pop DX          ; load board data
             shr DX,5        ; next row
-            push CX         ; save column,row
             mov CX,gameVars ; test for X
             and CL,1        ; player data only
             inc CL          ; add one (since a 0 1 and 2 from getColumn represent nothing, X, and O respectively)
             mov AL,CL       ; place in AL
             pop CX          ; load column,row
             cmp AH,AL       ; test if column has an X in it
-            jnz twTest3     ; if not, final test
+            jne twTest3     ; if not, final test
             inc BX          ; next iteration
             cmp BX,3        ; test iteration
-            jz twWin        ; if we've reached 3, we have a winner
+            je twWin        ; if we've reached 3, we have a winner
             jmp twTest2     ; loop
             ;
             ; test 3 - win by diagonal
             ;
 twTest3:    cmp CL,1        ; check if play was in middle row
-            jz twTest4      ; if so, check if play was in middle of board
+            je twTest4      ; if so, check if play was in middle of board
             mov BL,0        ; iteration 0
             mov DH,1        ; each iteration, we will add 1 to the column
             cmp CH,0        ; test column 0
@@ -341,7 +338,7 @@ twTest31:   mov DL,0        ; each iteration, we will add 1 to the row
             jz twTest32     ; if it is, we're fine
             mov DL,0FFh     ; otherwise we'll want to "subract 1" from the row
 twTest32:   cmp BL,3        ; check if we've reached the end of our loop
-            jz twWin        ; if we have, then they must have won
+            je twWin        ; if we have, then they must have won
             mov AX,gameVars ; get game data
             shr AX,1        ; remove player
             shr AX,CL
@@ -360,7 +357,7 @@ twTest32:   cmp BL,3        ; check if we've reached the end of our loop
             cmp AH,DL       ; check if it contained the proper piece
             pop DX          ; restore column,row direction
             pop CX          ; restore column,row
-            jnz twEnd       ; if not, then they didn't win yet
+            jne twEnd       ; if not, then they didn't win yet
             add CL,DL       ; this will add (or subtract) 1 row, based on the previous tests
             add CH,DH       ; this will add (or subtract) 1 column, based on the previous tests
             inc BL          ; next iteration
@@ -370,7 +367,7 @@ twTest32:   cmp BL,3        ; check if we've reached the end of our loop
             ;   this test is only ran if the center of the board is changed, however it is the most extensive/least optimized test unfortunately
             ;
 twTest4:    cmp CH,1        ; check if play was in middle column
-            jnz twEnd       ; if not, then they couldn't have made a winning move (after having tested row and column of course)
+            jne twEnd       ; if not, then they couldn't have made a winning move (after having tested row and column of course)
             mov AX,gameVars ; get game data
             mov BX,AX       ; copy into BX
             and BX,1        ; player only
@@ -380,13 +377,13 @@ twTest4:    cmp CH,1        ; check if play was in middle column
             mov DL,0        ; column 0
             call getColumn  ; check 0,0
             cmp DL,BL       ; see if 0,0 is owned by this player
-            jnz twTest4R    ; if it isn't, try going right to left
+            jne twTest4R    ; if it isn't, try going right to left
             mov AX,gameVars ; get game data
             shr AX,11       ; get row 2
             mov DL,2        ; column 2
             call getColumn  ; check 2,2
             cmp DL,BL       ; see if 2,2 is owned by this player
-            jz twWin        ; if it is, they win
+            je twWin        ; if it is, they win
             jmp twEnd       ; otherwise, keep playing...
 twTest4R:   mov AX,gameVars ; get game data
             shr AX,1        ; remove player
@@ -394,27 +391,27 @@ twTest4R:   mov AX,gameVars ; get game data
             mov DL,2        ; column 2
             call getColumn  ; check 2,0
             cmp DL,BL       ; see if 2,0 is owned by this player
-            jnz twEnd       ; if it isn't, keep playing...
+            jne twEnd       ; if it isn't, keep playing...
             mov AX,gameVars ; get game data
             shr AX,11       ; get row 2
             mov DL,0        ; column 0
             call getColumn  ; check 0,2
             cmp DL,BL       ; see if 0,2 is owned by this player
-            jz twWin        ; if it is, they win
+            je twWin        ; if it is, they win
             jmp twEnd       ; otherwise, keep playing...
             ;
             ; congratulations, someone has won
             ;
-twWin:      mov AX,gameVars     ; get data
-            and AX,1            ; only want LSB
-            add AX,1            ; increase by one that way we get X or O, instead of space or X
-            mov [pieces+3],AL   ; set winner
-            lea BX,pieces       ; get player characters
-            add BX,AX           ; offset to X or O
-            mov DX,1            ; string length of 1
-            call WriteText      ; print player character to screen
-            lea DX,congrats     ; load win text
-            call WriteLn        ; print to screen
+twWin:      mov AX,gameVars   ; get data
+            and AX,1          ; only want LSB
+            add AX,1          ; increase by one that way we get X or O, instead of space or X
+            mov [pieces+3],AL ; set winner
+            lea BX,pieces     ; get player characters
+            add BX,AX         ; offset to X or O
+            mov DX,1          ; string length of 1
+            call WriteText    ; print player character to screen
+            lea DX,congrats   ; load win text
+            call WriteLn      ; print to screen
 twEnd:      ret
 testWin     ENDP
 ;-----------------------------|
@@ -423,60 +420,42 @@ testWin     ENDP
 
 ;----------------------------|
 ; Extract Row Procedure      |
+;                            |
+;   DL - row                 |
 ;----------------------------|
 extractRow  PROC
             ;
-            ; multiply requested row by 5 (remember each row takes 5 bits of memory)
+            ; get row from memory
             ;
-            mov DH,DL ; copy row (DL) to DH
-            shl DH,1  ; multiply row by 2
-            shl DH,1  ; multiply row by 2 (4)
-            add DH,DL ; add DL to DH
-            mov CL,DH ; place DH in CL, thus multiplying DL by 5 (CL = DL * 5)
-
+            mov CL,DL       ; CL = row
+            shl CL,1        ; row * 2
+            shl CL,1        ; row * 4
+            add CL,DL       ; row * 5
+            mov BX,gameVars ; get game data
+            shl BX,CL       ; move to requested row
+            shr BX,0Bh      ; now BH will be 0 (we'll use this for iteration) and BL will be the row data
             ;
-            ; get the requested row from memory
+            ; grab each column and place in memory
             ;
-            mov AX,gameVars ; retrieve game variables
-            shl AX,CL       ; move to correct row of piece data
-            shr AX,0Bh      ; move the 5 bits we need to the front
-            and AX,1Fh      ; remove bits 5-15, we only want 0-4
-
-            ;
-            ; set columns in memory so board data is displayed
-            ;
-            mov CH,0        ; set iteration 0
-            ;
-            ; loop through the data
-            ;
-exRowIt:    inc CH               ; next iteration
-            mov CL,3             ; set CL to 3, so we can divide by 3
-            div CL               ; divide AX by 3 (store in AL, remainder in AH)
-            mov BX,OFFSET pieces ; get possible play pieces (address)
-            mov DX,0             ; zero out DX
-            mov DL,AH            ; get remainder (modulus) into DL
-            add BX,DX            ; add result of division
-            mov DL,[BX]          ; DL should now have a space, an X, or an O
-            mov BX,OFFSET board  ; get board address
-            add BX,13h           ; move to 3rd layout + 1 for first column, but we subtract 4 so the following loop works correctly
-            push CX              ; save iteration (we only need CH)
-
-            ;
-            ; modify the correct column
-            ;
-exRowItCol: add BX,4          ; next column
-            dec CH            ; iteration - 1
-            jnz exRowItCol ; if this is zero, we're in the correct column
-
-            ;
-            ; determine if we should change another column
-            ;
-            pop CX      ; load iteration (from CH)
-            cmp CH,3    ; check if we're on iteration 3
-            mov [BX],DL ; and now we place the character in DL, into the board area
-            mov AH,0    ; get rid of remainder, (so AX is divided by 3)
-            jnz exRowIt ; if CH is anything other than 3, we reiterate
-
+exRowIt:    mov AL,BL          ; copy row data into AL
+            mov DX,0           ; zero out DX
+            mov DL,BH          ; use iteration as column
+            call getColumn     ; get column
+            mov CX,BX          ; get column and row
+            push BX            ; save column and row
+            mov BX,DX          ; we're going to add DL to an address offset
+            mov AL,[pieces+BX] ; get piece character
+            lea BX,board       ; get board address
+            add BX,17h         ; add 23 (22 + 1 offset)
+            shr CX,8           ; get column alone
+            shl CL,1           ; DL * 2
+            shl CL,1           ; DL * 4
+            add BX,CX          ; add BH * 4 offset
+            mov [BX],AL        ; place in memory
+            pop BX             ; load column and row
+            inc BH             ; next column
+            cmp BH,3           ; see if we've reached the end
+            jne exRowIt        ; if not, repeat
             ret
 extractRow  ENDP
 ;----------------------------|
@@ -486,15 +465,14 @@ extractRow  ENDP
 ;---------------------------|
 ; Get Column Procedure      |
 ;   Place row data in AX    |
-;   and column in DL (1-3)  |
+;   and column in DL (0-2)  |
 ; column will be returned   |
 ; in DL                     |
 ;---------------------------|
 getColumn PROC
-          mov CH,0FFh ; set iteration 0
+          mov CX,0FF03h    ; set iteration 255 and CL to 3 for division
 gcLoop:   inc CH      ; increment iteration
           mov AH,0    ; clear out possible remainder from previous iteration
-          mov CL,3
           div CL      ; divide board in AX by 3
           cmp CH,DL   ; compare current column to requested column
           jnz gcLoop  ; if we haven't reached the column we want, try again
