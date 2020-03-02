@@ -333,7 +333,7 @@ twTest3:    cmp CL,1        ; check if play was in middle row
             cmp CH,0        ; test column 0
             jz twTest31     ; if it is, we're fine
             mov DH,0FFh     ; otherwise we'll want to "subtract 1" from the column
-twTest31:   mov DL,0        ; each iteration, we will add 1 to the row
+twTest31:   mov DL,1        ; each iteration, we will add 1 to the row
             cmp CL,0        ; test row 0
             jz twTest32     ; if it is, we're fine
             mov DL,0FFh     ; otherwise we'll want to "subract 1" from the row
