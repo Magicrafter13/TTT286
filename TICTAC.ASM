@@ -32,7 +32,7 @@ thanks    DB "Thanks for playing!",'$'
 congrats  DB " Wins the game!",'$'
 gameVars  DW 0                                   ; lsb is the current player (0 = x, 1 = y), bits 1-15 are board layout (5 bits per row)
 board     DB "   ³   ³   ÄÄÄÅÄÄÄÅÄÄÄ ! ³ ! ³ ! " ; building blocks of the game board
-pieces    DB " XO"                               ; possible pieces to place on board
+pieces    DB " XO",0                             ; possible pieces to place on board
 pattern   DB 88h                                 ; takes the binary form of 10001000, which, if shifted right,
                                                  ; will let me draw board chunk 0,0,0,1,0,0,0,1,0,0,0 while only using 1 byte for the pattern
 
@@ -70,10 +70,17 @@ start:
 
 InitGame:
   ; ---------- initialize game
-  mov gameVars,0 ; refresh variables
+  mov AX,3          ; video function 0 set video mode, mode 3
+  int 10h           ; call BIOS video
 
-  mov AX,3       ; video function 0 set video mode, mode 3
-  int 10h        ; call BIOS video
+  mov gameVars,0    ; refresh variables
+  cmp [pieces+3],0  ; check winner
+  jz startGameLoop  ; if no winner was set, continue game
+  mov AL,[pieces+3] ; get winner
+  and AX,1          ; remove potential 2nd bit
+  xor AX,1          ; change player
+  mov gameVars,AX   ; set player
+  mov [pieces+3],0  ; unset winner
 
   startGameLoop:
     ; ---------- clear screen
@@ -82,7 +89,7 @@ InitGame:
     mov DX,0 ; Row 0, Column 0
     int 10h  ; call BIOS video
 
-    ; ---------- say whose turn it is, and draw the board
+    ; ---------- say whose turn it is
     lea  DX,moveText   ; Loads the address of the 'words' string, into the DX register
     call Write         ; Ouputs moveText to console, followed by CRLF
     mov  AX,[gameVars] ; load gameVars in AX
@@ -96,36 +103,25 @@ InitGame:
 
     call drawBoard
 
-    ; ---------- if someone won, print congratulatory text
-    cmp gameVars,0FFFEh ; see if a winner was found
-    jb userInput        ; if that number is greater than the board data, then there is no winner yet
-    mov AX,gameVars     ; set AX to 1
-    and AX,1            ; only want LSB
-    xor AX,1            ; toggle player
-    add AX,1            ; increase by one that way we get X or O, instead of space or X
-    lea BX,pieces       ; get player characters
-    add BX,AX           ; offset to X or O
-    mov DX,1            ; string length of 1
-    call WriteText      ; print player character to screen
-    lea DX,congrats     ; load win text
-    call WriteLn        ; print to screen
-
     ; ---------- get user input
   userInput:
-    mov AH,7       ; DOS function 07, get single character from keyboard (no echo)
-    int 21h        ; Call DOS
+    mov AH,7         ; DOS function 07, get single character from keyboard (no echo)
+    int 21h          ; Call DOS
 
-    cmp AL,1Bh     ; compare AL to 1B which corresponds to the escape key
-    jz endGameLoop ; drop out of loop to end game
-    cmp AL,71h     ; compare AL to 71 which corresponds to lowercase 'q'
-    jz endGameLoop ; gotta give people options :)
-    cmp AL,72h     ; compare AL to 72 which corresponds to lowercase 'r'
-    jz InitGame    ; restarts game
+    cmp AL,1Bh       ; compare AL to 1B which corresponds to the escape key
+    jz endGameLoop   ; drop out of loop to end game
+    cmp AL,71h       ; compare AL to 71 which corresponds to lowercase 'q'
+    jz endGameLoop   ; gotta give people options :)
+    cmp AL,72h       ; compare AL to 72 which corresponds to lowercase 'r'
+    jz InitGame      ; restarts game
 
-    sub AL,31h     ; ascii for 1 is 31h, so turn that into a 0
-    cmp AL,9       ; now subtract 9, that way if it is 0-8 we will trigger the carry flag
-    jnc noTryMove  ; if they did not input 1-9, then don't try anything (continue)
-    call tryMove   ; attempt the requested move, if it is valid, the board will be updated, and the player will change
+    cmp [pieces+3],0 ; see if there is a winner
+    jnz userInput
+
+    sub AL,31h       ; ascii for 1 is 31h, so turn that into a 0
+    cmp AL,9         ; now subtract 9, that way if it is 0-8 we will trigger the carry flag
+    jnc noTryMove    ; if they did not input 1-9, then don't try anything (continue)
+    call tryMove     ; attempt the requested move, if it is valid, the board will be updated, and the player will change
   noTryMove:
 
     jmp startGameLoop ; refresh screen
@@ -415,9 +411,16 @@ twTest4R:   mov AX,gameVars ; get game data
             ;
             ; congratulations, someone has won
             ;
-twWin:      mov AX,gameVars ; get game data
-            or AX,0FFFEh    ; set bits 1-15 to 1 (not possible during normal gameplay)
-            mov gameVars,AX ; commit to memory
+twWin:      mov AX,gameVars     ; get data
+            and AX,1            ; only want LSB
+            add AX,1            ; increase by one that way we get X or O, instead of space or X
+            lea BX,pieces       ; get player characters
+            add BX,AX           ; offset to X or O
+            mov DX,1            ; string length of 1
+            call WriteText      ; print player character to screen
+            lea DX,congrats     ; load win text
+            call WriteLn        ; print to screen
+            mov [pieces+3],AL   ; set winner
 twEnd:      ret
 testWin     ENDP
 ;-----------------------------|
