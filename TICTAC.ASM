@@ -26,15 +26,15 @@ MyData    SEGMENT PUBLIC
 
 EXTRN CRLF:BYTE
 
-moveText  DB "Your move, ",'$'
-copyright DB "(c) 2020 - Matthew Rease",'$'
-thanks    DB "Thanks for playing!",'$'
-congrats  DB " Wins the game!",'$'
-gameVars  DW 0                                   ; lsb is the current player (0 = x, 1 = y), bits 1-15 are board layout (5 bits per row)
-board     DB "   ³   ³   ÄÄÄÅÄÄÄÅÄÄÄ ! ³ ! ³ ! " ; building blocks of the game board
-pieces    DB " XO",0                             ; possible pieces to place on board
-pattern   DB 88h                                 ; takes the binary form of 10001000, which, if shifted right,
-                                                 ; will let me draw board chunk 0,0,0,1,0,0,0,1,0,0,0 while only using 1 byte for the pattern
+moveText  DB  "Your move, ",'$'
+copyright DB  "(c) 2020 - Matthew Rease",'$'
+thanks    DB  "Thanks for playing!",'$'
+congrats  DB  " Wins the game!",'$'
+gameVars  DW  0                                   ; lsb is the current player (0 = x, 1 = y), bits 1-15 are board layout (5 bits per row)
+board     DB  "   ³   ³   ÄÄÄÅÄÄÄÅÄÄÄ ! ³ ! ³ ! " ; building blocks of the game board
+pieces    DB  " XO",0                             ; possible pieces to place on board
+pattern   equ 88h                                 ; takes the binary form of 10001000, which, if shifted right,
+                                                  ; will let me draw board chunk 0,0,0,1,0,0,0,1,0,0,0 while only using 1 byte for the pattern
 
 Numbers   DB "0123456789"
 
@@ -151,8 +151,7 @@ drawBoard   PROC
             ; each iteration of this loop will print one strip of the board to the screen
             ;
 drawBLoop:  mov BX,0           ; set register where string offset goes to 0
-            mov AL,AH          ; place remaining board pattern in AL
-            and AL,1           ; 0 out all but LSB
+            test AH,1          ; check LSB
             jz drawBDeter      ; if LSB is 0, skips following command
             mov BX,0Bh         ; change offset to 11, so we print the 2nd board strip
 
@@ -170,7 +169,7 @@ drawBDeter: ;-----------------------------------------|
             sub DL,2        ; subract 2 (this code SHOULD only run if CL is 2 6 or 10)
             shr DX,1
             shr DX,1        ; DL has now been divided by 4
-            and DL,3        ; remove first 2 bits (in case there was anything in DH)
+            and DL,3        ; remove bits 2-7 (in case there was anything in DH)
             call extractRow ; will place play pieces for this row
             pop CX          ;\
             pop BX          ; |- Restore
@@ -242,11 +241,9 @@ tryMove    PROC
            ;
            ; construct mask to add to board data
            ;
-           mov AX,1        ; place _ _ X in AX
-           mov DX,gameVars ; get current game data
-           and DX,1        ; determine current player
-           jz tmColumn     ; time to adjust the new piece to the proper column
-           add AX,1        ; increase the pattern we add by 1 (changing the X to an O)
+           mov AX,gameVars ; get current game data
+           and AX,1        ; set pattern to player
+           inc AX          ; then add one (1 = X, 2 = O)
 tmColumn:  cmp CL,0        ; see if column is 0
            jz tmRow        ; time to adjust the new piece to the proper row
            mov BX,AX       ; temp store AX in BX
