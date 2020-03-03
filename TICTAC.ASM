@@ -30,6 +30,13 @@ moveText  DB  "Your move, ",'$'
 copyright DB  "(c) 2020 - Matthew Rease",'$'
 thanks    DB  "Thanks for playing!",'$'
 congrats  DB  " Wins the game!",'$'
+helpText  DB  "Help:",0Dh,0Ah,
+              "        r - restart game",0Dh,0Ah,
+              "  q / esc - quit game",0Dh,0Ah,
+              "  [7 - 9] - row 1, column 1-3",0Dh,0Ah,
+              "  [4 - 6] - row 2, column 1-3",0Dh,0Ah,
+              "  [1 - 3] - row 3, column 1-3",0Dh,0Ah,
+              "Press any key to continue...",'$'
 gameVars  DW  0                                   ; lsb is the current player (0 = x, 1 = y), bits 1-15 are board layout (5 bits per row)
 board     DB  "   ³   ³   ÄÄÄÅÄÄÄÅÄÄÄ ! ³ ! ³ ! " ; building blocks of the game board
 pieces    DB  " XO",0                             ; possible pieces to place on board
@@ -70,16 +77,18 @@ start:
 
 InitGame:
   ; ---------- initialize game
-  mov AX,3          ; video function 0 set video mode, mode 3
-  int 10h           ; call BIOS video
-
   mov gameVars,0    ; refresh variables
   cmp [pieces+3],0  ; check winner
-  jz startGameLoop  ; if no winner was set, continue game
+  jz ClearScreen    ; if no winner was set, continue game
   mov AL,[pieces+3] ; get winner
   and AX,1          ; remove potential 2nd bit
   mov gameVars,AX   ; set player
   mov [pieces+3],0  ; unset winner
+
+ClearScreen:
+  ; ---------- clear screen
+  mov AX,3          ; video function 0 set video mode, mode 3
+  int 10h           ; call BIOS video
 
   startGameLoop:
     ; ---------- clear screen
@@ -107,21 +116,31 @@ InitGame:
     mov AH,7         ; DOS function 07, get single character from keyboard (no echo)
     int 21h          ; Call DOS
 
-    cmp AL,1Bh       ; compare AL to 1B which corresponds to the escape key
-    jz endGameLoop   ; drop out of loop to end game
-    cmp AL,71h       ; compare AL to 71 which corresponds to lowercase 'q'
-    jz endGameLoop   ; gotta give people options :)
-    cmp AL,72h       ; compare AL to 72 which corresponds to lowercase 'r'
-    jz InitGame      ; restarts game
+    cmp AL,1Bh        ; compare AL to 1B which corresponds to the escape key
+    je endGameLoop    ; drop out of loop to end game
+    cmp AL,71h        ; compare AL to 71 which corresponds to lowercase 'q'
+    je endGameLoop    ; gotta give people options :)
+    cmp AL,72h        ; compare AL to 72 which corresponds to lowercase 'r'
+    je InitGame       ; restarts game
+    cmp AL,3Fh        ; compare AL to 3F which corresponds to '?'
+    je printHelp      ; print help text
+    cmp AL,68h        ; compare AL to 68 which corresponds to lowercase 'h'
+    je printHelp      ; print help text
 
-    cmp [pieces+3],0 ; see if there is a winner
-    jnz userInput
+    cmp [pieces+3],0  ; see if there is a winner
+    jnz userInput     ; if there is, then we won't allow any further changes to the board
 
-    sub AL,31h       ; ascii for 1 is 31h, so turn that into a 0
-    cmp AL,9         ; now subtract 9, that way if it is 0-8 we will trigger the carry flag
-    jnc userInput    ; if they did not input 1-9, then don't try anything (continue)
-    call tryMove     ; attempt the requested move, if it is valid, the board will be updated, and the player will change
+    sub AL,31h        ; ascii for 1 is 31h, so turn that into a 0
+    cmp AL,9          ; now subtract 9, that way if it is 0-8 we will trigger the carry flag
+    jae userInput     ; if they did not input 1-9, then don't try anything (continue)
+    call tryMove      ; attempt the requested move, if it is valid, the board will be updated, and the player will change
     jmp startGameLoop ; refresh screen
+  printHelp:
+    lea DX,helpText   ; get address of help message
+    call WriteLn      ; print
+    mov AH,7          ; DOS function 07, get single char from keyboard (no echo)
+    int 21h           ; Call DOS again (for user input)
+    jmp ClearScreen   ; refresh screen (if they print help repeatedly they might push the gameboard offscreen, we don't want that to happen)
   endGameLoop:
 
   lea DX,copyright ; place address of copyright string in DX
