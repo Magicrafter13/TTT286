@@ -98,23 +98,24 @@ ClearScreen:
     int 10h  ; call BIOS video
 
     ; ---------- say whose turn it is
-    lea  DX,moveText   ; Loads the address of the 'words' string, into the DX register
-    call Write         ; Ouputs moveText to console, followed by CRLF
-    mov  AX,[gameVars] ; load gameVars in AX
-    mov  AH,0Eh        ; function 0E, output char to screen
-    and  AL,1          ; remove all but LSB
-    add  AL,30h        ; add 30h (ascii numbers begin at 30h)
-    mov  BX,0          ; set BX to 0
-    int  10h           ; call BIOS function 0E
-    lea  DX,CRLF       ; load address of CRLF in DX
-    call WriteLn       ; new line
+    lea  DX,moveText    ; Loads the address of the 'words' string, into the DX register
+    call Write          ; Ouputs moveText to console, followed by CRLF
+    mov  BX,[gameVars]  ; load gameVars in BX
+    and  BX,1           ; remove all but LSB
+    add  BX,1           ; add 1 (1 = X, 2 = O)
+    mov  AL,[pieces+BX] ; get player char
+    mov  AH,0Eh         ; function 0E, output char to screen
+    mov  BX,0           ; set BX to 0
+    int  10h            ; call BIOS function 0E
+    lea  DX,CRLF        ; load address of CRLF in DX
+    call WriteLn        ; new line
 
     call drawBoard
 
     ; ---------- get user input
   userInput:
-    mov AH,7         ; DOS function 07, get single character from keyboard (no echo)
-    int 21h          ; Call DOS
+    mov AH,7          ; DOS function 07, get single character from keyboard (no echo)
+    int 21h           ; Call DOS
 
     cmp AL,1Bh        ; compare AL to 1B which corresponds to the escape key
     je endGameLoop    ; drop out of loop to end game
