@@ -43,7 +43,7 @@ videos    DB  " 1 - Text only (default)",'$',     ; add 19h to get next line
 gameVars  DW  0                                   ; lsb is the current player (0 = x, 1 = y), bits 1-15 are board layout (5 bits per row)
 board     DB  "   ³   ³   ÄÄÄÅÄÄÄÅÄÄÄ ! ³ ! ³ ! " ; building blocks of the game board
 pieces    DB  " XO",0                             ; possible pieces to place on board
-video     DB  3,8                                 ; video mode 3 (80x25 text)
+video     DB  0,3,8                               ; video mode 3 (80x25 text)
 pattern   equ 88h                                 ; takes the binary form of 10001000, which, if shifted right,
                                                   ; will let me draw board chunk 0,0,0,1,0,0,0,1,0,0,0 while only using 1 byte for the pattern
 vidcount  equ 2                                   ; there are currently 2 video options
@@ -80,6 +80,7 @@ start:
   mov AX,MyData ; Moves Data segment address to AX register
   mov DS,AX     ; Allowing us to move that address to the intended data segment register, DS
 
+  ; ---------- set video mode
   lea DX,videoMode ; get address of video mode string
   call WriteLn     ; write to screen
   mov AX,0         ; count 0
@@ -96,6 +97,12 @@ GetVideo:
   jne GetVideo     ; if not, keep going
   mov AH,1         ; DOS function 1, get char with echo
   int 21h          ; Call DOS
+  mov AH,0         ; 0 out upper register
+  sub AL,30h       ; subtract 30h, (turn ascii number into actual number)
+  lea BX,video     ; get video mode data
+  add BX,AX        ; use as offset
+  mov AL,[BX]      ; place value in AL
+  mov video,AL     ; set video mode
 
 InitGame:
   ; ---------- initialize game
@@ -109,8 +116,9 @@ InitGame:
 
 ClearScreen:
   ; ---------- clear screen
-  mov AX,3          ; video function 0 set video mode, mode 3
-  int 10h           ; call BIOS video
+  mov AH,0       ; Video function 0, set mode
+  mov AL,[video] ; get video mode
+  int 10h        ; call BIOS video
 
   startGameLoop:
     ; ---------- clear screen
