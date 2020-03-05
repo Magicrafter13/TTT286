@@ -37,11 +37,16 @@ helpText  DB  "Help:",0Dh,0Ah,
               "  [4 - 6] - row 2, column 1-3",0Dh,0Ah,
               "  [1 - 3] - row 3, column 1-3",0Dh,0Ah,
               "Press any key to continue...",'$'
+videoMode DB  "Please select video mode:",'$'
+videos    DB  " 1 - Text only (default)",'$',     ; add 19h to get next line
+              " 2 - Tandy/PC Jr.       ",'$'
 gameVars  DW  0                                   ; lsb is the current player (0 = x, 1 = y), bits 1-15 are board layout (5 bits per row)
 board     DB  "   ³   ³   ÄÄÄÅÄÄÄÅÄÄÄ ! ³ ! ³ ! " ; building blocks of the game board
 pieces    DB  " XO",0                             ; possible pieces to place on board
+video     DB  3,8                                 ; video mode 3 (80x25 text)
 pattern   equ 88h                                 ; takes the binary form of 10001000, which, if shifted right,
                                                   ; will let me draw board chunk 0,0,0,1,0,0,0,1,0,0,0 while only using 1 byte for the pattern
+vidcount  equ 2                                   ; there are currently 2 video options
 
 Numbers   DB "0123456789"
 
@@ -74,6 +79,23 @@ start:
   ; ---------- set data location
   mov AX,MyData ; Moves Data segment address to AX register
   mov DS,AX     ; Allowing us to move that address to the intended data segment register, DS
+
+  lea DX,videoMode ; get address of video mode string
+  call WriteLn     ; write to screen
+  mov AX,0         ; count 0
+GetVideo:
+  push AX          ; backup count
+  lea DX,videos    ; get video modes
+  mov CL,19h       ; 19h = 25
+  mul CL           ; multiply AX by 25
+  add DX,AX        ; use as offset
+  call WriteLn     ; print
+  pop AX           ; restore count
+  inc AX           ; add 1
+  cmp AX,vidcount  ; test if we're done
+  jne GetVideo     ; if not, keep going
+  mov AH,1         ; DOS function 1, get char with echo
+  int 21h          ; Call DOS
 
 InitGame:
   ; ---------- initialize game
