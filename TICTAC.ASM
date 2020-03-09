@@ -51,11 +51,11 @@ pieces    DB  " XO",0                             ; possible pieces to place on 
           ;   sprite  3-6 = 'YOUR MOVE '                  - 180h, 200h, 280h, 300h
           ;   sprite    7 = fancy x                       - 380h
           ;   sprite    8 = fancy o                       - 400h
-          ;   sprite 9-13 = "WINNER:"                     - 480h, 500h, 580h, 600h
-          ;   sprite   14 = vertical bar                  - 680h
-          ;   sprite   15 = horizontal bar                - 700h
-          ;   sprite   16 = horizontal/vertical cross bar - 780h
-          ;   sprite   17 = trophy                        - 800h
+          ;   sprite 9-13 = "WINNER:"                     - 480h, 500h, 580h, 600h, 680h
+          ;   sprite   14 = vertical bar                  - 700h
+          ;   sprite   15 = horizontal bar                - 780h
+          ;   sprite   16 = horizontal/vertical cross bar - 800h
+          ;   sprite   17 = trophy                        - 880h
 jrdata    DB  "JR.BIN",0,'$'                      ; location of binary data for PCjr/Tandy graphics
 jrpieces  DB  900h DUP ('#')        ; reserve 2176 bytes for the PCjr/Tandy graphics
 video     DB  0,3,9                               ; video mode 3 (80x25 text)
@@ -175,9 +175,14 @@ InitGame:
 
 ClearScreen:
   ; ---------- clear screen
-  xor AH,AH      ; Video function 0, set mode
-  mov AL,[video] ; get video mode
-  int 10h        ; call BIOS video
+  xor AH,AH         ; Video function 0, set mode
+  mov AL,[video]    ; get video mode
+  int 10h           ; call BIOS video
+  cmp [video],9     ; check if we're in PCjr/Tandy mode
+  je clsJr
+  jmp startGameLoop ; if not, start game as usual
+clsJr:
+  call drawBoardJr
 
   startGameLoop:
     ; ---------- clear screen
@@ -187,8 +192,12 @@ ClearScreen:
     int 10h   ; call BIOS video
 
     ; ---------- say whose turn it is
-    cmp [video],3       ; check if we're in text mode
-    jne drawGame        ; if not, don't print text
+    cmp [video],3
+    je turnText
+    cmp [video],9
+    je turnJr
+    jmp drawGame
+  turnText:
     lea  DX,moveText    ; Loads the address of the 'words' string, into the DX register
     call Write          ; Ouputs moveText to console, followed by CRLF
     mov  BX,[gameVars]  ; load gameVars in BX
@@ -200,6 +209,33 @@ ClearScreen:
     int  10h            ; call BIOS function 0E
     lea  DX,CRLF        ; load address of CRLF in DX
     call WriteLn        ; new line
+    jmp drawGame
+  turnJr:
+    cmp [pieces+3],0
+    jnz drawGame
+    mov AX,1B80h
+    push AX
+    mov BX,180h
+    call JrDrawSpr
+    pop AX
+    add AX,8
+    push AX
+    call JrDrawSpr
+    pop AX
+    add AX,8
+    push AX
+    call JrDrawSpr
+    pop AX
+    add AX,8
+    push AX
+    call JrDrawSpr
+    pop AX
+    test gameVars,1
+    jz turnJrCont
+    add BX,80h
+  turnJrCont:
+    call JrDrawSpr
+    jmp drawGame
 
   drawGame:
     call drawBoard
@@ -320,30 +356,22 @@ dbText:     add BX,OFFSET board ; combine address of board layouts with offset
             ;
             ; draw row (PCjr/Tandy)
             ;
-dbJr:       push CX             ; save count (CL)
+dbJr:       cmp CL,0Ah  ; test if 10
+            je dbJrCont ; if so, draw row
+            cmp CL,6    ; test if 6
+            je dbJrCont ; if so, draw row
+            cmp CL,2    ; test if 2
+            je dbJrCont ; if so, draw row
+            jmp dbEnd   ; guess we're done here
+dbJrCont:   push CX             ; save count (CL)
             push AX             ; save remaining pattern (AH)
             mov AX,BX           ; board pattern offset
             mov DX,0Bh          ; 11
             div DL              ; divide by 11 (so we get 0, 1, or 2)
-            jmp dbJrCont
-            cmp AX,2            ; see if it's one of those rows
-            jne dbJrCont        ; if not, continue
-            push CX
-            sub CL,2
-            shr CX,1
-            shr CX,1
-            and CL,3            ; same logic as drawBDeter
-            mov DX,gameVars     ; place game data in DX
-            shr DX,1            ; remove player
-            shr DX,CL
-            shr DX,CL
-            shr DX,CL
-            and DX,1Fh
-            pop CX
-dbJrCont:   mov BX,AX
+            mov BX,AX
             mov AX,0Bh          ; 11
             sub AL,CL           ; inverted count (instead of 11-1, it's now 0-10)
-            call drawBoardJr    ; draw row, PCjr/Tandy style
+            call drawRowJr      ; draw row, PCjr/Tandy style
             pop AX              ; get pattern back (AH)
             pop CX              ; get count back (CL)
             jmp dbEnd           ; finish iteration
@@ -369,137 +397,129 @@ drawBoard   ENDP
 ;   AX = vertical offset (row technically)  |
 ;-------------------------------------------|
 drawBoardJr PROC
-;mov DX,03DAh ; PCjr/Tandy Video data address, 'Mode Control 1' register
-;mov AL,10h   ; enable 16 color graphics
-;out DX,AL    ; send byte to video
-;add DX,4     ; select 'Border Color' register
-;mov AL,6     ; color is now brown
-;out DX,AL    ; send byte to video
-
-;sub DX,4     ; select 'Mode Control 1' register
-;mov AL,3     ; bit 0 = high-bandwidth, bit 1 = graphics mode
-;out DX,AL    ; send byte to video
-;mov DX,03DEh ; select 'Mode Control 2' register
-;mov AL,14h   ; 1 = enable border color, 4 = enable 16 colors
-;out DX,AL
-
-;mov AX,0B800h; PCjr/Tandy video offset in memory
-;mov ES,AX    ; place in Extra Segment register
-;ret
-            shl AX,1
-            shl AX,1 ; multiply offset by 4 (because of vram banks, we only multiply by 4 instead of 16)
-            mov CL,0A0h ; 160
-            mul CL ; multiply by 160
-            ;
-            ; draw standard empty row, with vertical bars
-            ;
-dbJr0:      cmp BX,0 ; check if vertical bar row
-            jne dbJr1 ; not vertical bar row, try the others
-            add AX,18h ; add 24
-            push AX ; backup offset
-            mov BX,700h ; sprite 14, vertical bar
+            mov BX,pattern
+            xor AX,AX
+dbJrStart:  cmp AX,1B80h   ; check if we've drawn all 11 rows
+            jae dbJrEnd
+            test BX,1      ; check LSB
+            jz dbJr0
+            jnz dbJr1
+dbJr0:      push BX        ; backup pattern
+            add AX,18h     ; add 24
+            push AX        ; backup offset
+            mov BX,700h    ; sprite 14, vertical bar
             call JrDrawSpr ; draw first bar
-            sub BX,80h ; move back to sprite 14
-            pop AX ; restore offset
-            add AX,20h ; add 24
+            sub BX,80h     ; move back to sprite 14
+            pop AX         ; restore offset
+            add AX,20h     ; add 32
             call JrDrawSpr ; draw second bar
-            ret
-            ;
-            ; draw horizontal row (crosses)
-            ;
-dbJr1:      cmp BX,1 ; check if horizontal bar + crosses row
-            jne dbJr2 ; must be vertical bar (data) row
-            push AX ; backup offset
-            mov BX,780h ; sprite 15, horizontal bar
+            add AX,248h    ; beginning of next row
+            pop BX         ; restore pattern
+            shr BX,1       ; next pattern
+            jmp dbJrStart
+dbJr1:      push BX        ; backup pattern
+            push AX        ; backup offset
+            mov BX,780h    ; sprite 15, horizontal bar
             call JrDrawSpr ; draw horizontal bar 1
-            sub BX,80h ; sprite 15
-            pop AX ; restore offset
-            add AX,8 ; next grid space
-            push AX ; backup offset
+            sub BX,80h     ; sprite 15
+            pop AX         ; restore offset
+            add AX,8       ; next grid space
+            push AX        ; backup offset
             call JrDrawSpr ; draw horizontal bar 2
-            sub BX,80h ; sprite 15
-            pop AX ; restore offset
-            add AX,8 ; next grid space
-            push AX ; backup offset
+            sub BX,80h     ; sprite 15
+            pop AX         ; restore offset
+            add AX,8       ; next grid space
+            push AX        ; backup offset
             call JrDrawSpr ; draw horizontal bar 3
-            pop AX ; restore offset
-            add AX,8 ; next grid space
-            push AX ; backup offset
+            pop AX         ; restore offset
+            add AX,8       ; next grid space
+            push AX        ; backup offset
             call JrDrawSpr ; draw cross bar 1
-            sub BX,100h ; sprite 15
-            pop AX ; restore offset
-            add AX,8 ; next grid space
-            push AX ; backup offset
+            sub BX,100h    ; sprite 15
+            pop AX         ; restore offset
+            add AX,8       ; next grid space
+            push AX        ; backup offset
             call JrDrawSpr ; draw horizontal bar 4
-            sub BX,80h ; sprite 15
-            pop AX ; restore offset
-            add AX,8 ; next grid space
-            push AX ; backup offset
+            sub BX,80h     ; sprite 15
+            pop AX         ; restore offset
+            add AX,8       ; next grid space
+            push AX        ; backup offset
             call JrDrawSpr ; draw horizontal bar 5
-            sub BX,80h ; sprite 15
-            pop AX ; restore offset
-            add AX,8 ; next grid space
-            push AX ; backup offset
+            sub BX,80h     ; sprite 15
+            pop AX         ; restore offset
+            add AX,8       ; next grid space
+            push AX        ; backup offset
             call JrDrawSpr ; draw horizontal bar 6
-            pop AX ; restore offset
-            add AX,8 ; next grid space
-            push AX ; backup offset
+            pop AX         ; restore offset
+            add AX,8       ; next grid space
+            push AX        ; backup offset
             call JrDrawSpr ; draw cross bar 2
-            sub BX,100h ; sprite 15
-            pop AX ; restore offset
-            add AX,8 ; next grid space
-            push AX ; backup offset
+            sub BX,100h    ; sprite 15
+            pop AX         ; restore offset
+            add AX,8       ; next grid space
+            push AX        ; backup offset
             call JrDrawSpr ; draw horizontal bar 7
-            sub BX,80h ; sprite 15
-            pop AX ; restore offset
-            add AX,8 ; next grid space
-            push AX ; backup offset
+            sub BX,80h     ; sprite 15
+            pop AX         ; restore offset
+            add AX,8       ; next grid space
+            push AX        ; backup offset
             call JrDrawSpr ; draw horizontal bar 8
-            sub BX,80h ; sprite 15
-            pop AX ; restore offset
-            add AX,8 ; final grid space
+            sub BX,80h     ; sprite 15
+            pop AX         ; restore offset
+            add AX,8       ; final grid space
+            push AX        ; backup offset
             call JrDrawSpr ; draw horizontal bar 9
-            ret
-            ;
-            ; draw row 1, 5, or 9 (where pieces show up)
-            ;
-dbJr2:      add AX,8 ; first play piece grid space
-            push AX ; backup offset
-            mov BX,17h ; get piece 1
-            mov CL,[board+BX] ; place in CL
-            mov BL,CL ; move to BL
-            shl BX,7 ; multiply by 80h
-            call JrDrawSpr ; draw first piece of row
-            pop AX ; restore offset
-            add AX,10h ; next required grid space
-            push AX ; backup offset
-            mov BX,700h ; sprite 14 vertical bar
-            call JrDrawSpr ; draw first vertical bar
-            pop AX ; restore offset
-            add AX,10h ; next required grid space
-            push AX
-            mov BX,1Bh ; get piece 2
-            mov CL,[board+BX] ; place in CL
-            mov BL,CL ; move to BL
-            shl BX,7 ; multiply by 80h
-            call JrDrawSpr ; draw second piece of row
-            pop AX ; restore offset
-            add AX,10h ; next required grid space
-            push AX ; backup offset
-            mov BX,700h ; sprite 14 vertical bar
-            call JrDrawSpr ; draw second vertical bar
-            pop AX ; restore offset
-            add AX,10h ; next required grid space
-            mov BX,1Fh ; get piece 3
-            mov CL,[board+BX] ; place in CL
-            mov BL,CL ; move to BL
-            shl BX,7 ; multiply by 80h
-            call JrDrawSpr
-            ret
+            pop AX         ; restore offset
+            add AX,230h    ; beginning of next row
+            pop BX         ; restore pattern
+            shr BX,1       ; next pattern
+            jmp dbJrStart
+dbJrEnd:    ret
 drawBoardJr ENDP
 ;-------------------------------------------|
 ; Draw Board Procedure, for PCjr/Tandy ENDS |
 ;-------------------------------------------|
+
+;-----------------------------------------------|
+; Draw Board Row Procedure, for PCjr/Tandy      |
+;   CL should be row (between 1 and 9)          |
+;   AX should be video offset                   |
+;-----------------------------------------------|
+drawRowJr PROC
+            shl AX,1
+            shl AX,1    ; multiply offset by 4 (because of vram banks, we only multiply by 4 instead of 16)
+            mov CL,0A0h ; 160
+            mul CL      ; multiply by 160
+            ;
+            ; draw row 1, 5, or 9 (where pieces show up)
+            ;
+            add AX,8          ; first play piece grid space
+            push AX           ; backup offset
+            mov BX,17h        ; get piece 1
+            mov CL,[board+BX] ; place in CL
+            mov BL,CL         ; move to BL
+            shl BX,7          ; multiply by 80h
+            call JrDrawSpr    ; draw first piece of row
+            pop AX            ; restore offset
+            add AX,20h        ; next required grid space
+            push AX           ; backup offset
+            mov BX,1Bh        ; get piece 2
+            mov CL,[board+BX] ; place in CL
+            mov BL,CL         ; move to BL
+            shl BX,7          ; multiply by 80h
+            call JrDrawSpr    ; draw second piece of row
+            pop AX            ; restore offset
+            add AX,20h        ; next required grid space
+            mov BX,1Fh        ; get piece 3
+            mov CL,[board+BX] ; place in CL
+            mov BL,CL         ; move to BL
+            shl BX,7          ; multiply by 80h
+            call JrDrawSpr
+            ret
+drawRowJr ENDP
+;-----------------------------------------------|
+; Draw Board Row Procedure, for PCjr/Tandy ENDS |
+;-----------------------------------------------|
 
 ;-------------------------|
 ; Try Move Procedure      |
@@ -710,12 +730,51 @@ twWin:      mov AX,gameVars   ; get data
             and AX,1          ; only want LSB
             add AX,1          ; increase by one that way we get X or O, instead of space or X
             mov [pieces+3],AL ; set winner
-            lea BX,pieces     ; get player characters
+            cmp [video],3
+            je twWinText
+            cmp [video],9
+            je twWinJr
+            jmp twEnd
+twWinText:  lea BX,pieces     ; get player characters
             add BX,AX         ; offset to X or O
             mov DX,1          ; string length of 1
             call WriteText    ; print player character to screen
             lea DX,congrats   ; load win text
             call WriteLn      ; print to screen
+            jmp twEnd
+twWinJr:    push AX ; backup winner offset
+            mov AX,1B80h
+            push AX
+            mov BX,480h
+            call JrDrawSpr
+            pop AX
+            add AX,8
+            push AX
+            call JrDrawSpr
+            pop AX
+            add AX,8
+            push AX
+            call JrDrawSpr
+            pop AX
+            add AX,8
+            push AX
+            call JrDrawSpr
+            pop AX
+            add AX,8
+            push AX
+            call JrDrawSpr
+            pop AX
+            add AX,8
+            pop BX ; restore winner offset
+            shl BX,7
+            add BX,300h
+            push AX
+            call JrDrawSpr
+            pop AX
+            add AX,0Ch
+            mov BX,880h
+            call JrDrawSpr
+            jmp twEnd
 twEnd:      ret
 testWin     ENDP
 ;-----------------------------|
