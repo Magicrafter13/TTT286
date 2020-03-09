@@ -98,7 +98,7 @@ start:
   ; ---------- set video mode
   lea DX,videoMode ; get address of video mode string
   call WriteLn     ; write to screen
-  mov AX,0         ; count 0
+  xor AX,AX        ; count 0
 GetVideo:
   push AX          ; backup count
   lea DX,videos    ; get video modes
@@ -112,7 +112,7 @@ GetVideo:
   jne GetVideo     ; if not, keep going
   mov AH,1         ; DOS function 1, get char with echo
   int 21h          ; Call DOS
-  mov AH,0         ; 0 out upper register
+  xor AH,AH        ; 0 out upper register
   sub AL,30h       ; subtract 30h, (turn ascii number into actual number)
   lea BX,video     ; get video mode data
   add BX,AX        ; use as offset
@@ -137,102 +137,16 @@ GetVideo:
 
   ; load graphics
   mov AH,3Dh       ; DOS function 3D, open existing file
-  mov AL,0         ;
+  xor AL,AL        ; place 0 in AL
   lea DX,jrdata    ; get filename
   int 21h          ; call DOS, if successful, file handle will be stored in AX
-  ;jc NoFile        ; if carry flag set, error
+  jc NoFile        ; if carry flag set, error
   mov BX,AX        ; place file handle in BX
   mov AH,3Fh       ; DOS function 3F, read from file or device
   mov CX,0900h     ; load 2176 bytes
   lea DX,jrpieces  ; set address to load data
   int 21h          ; call DOS
-
   jmp InitGame
-
-  mov BX,0B800h ; address of video buffer
-  mov ES,BX     ; store for later in ES
-
-  mov BX,80h
-  mov AX,0
-  call JrDrawSpr
-  add AX,8
-  call JrDrawSpr
-  sub BX,100h
-  add AX,8
-  call JrDrawSpr
-  add AX,8
-  call JrDrawSpr
-  add AX,8
-  call JrDrawSpr
-  add AX,8
-  call JrDrawSpr
-  add AX,8
-  call JrDrawSpr
-  add AX,8
-  call JrDrawSpr
-  call JrDrawSpr
-  add AX,8
-  call JrDrawSpr
-  add AX,8
-  call JrDrawSpr
-  add AX,8
-  call JrDrawSpr
-  add AX,8
-  call JrDrawSpr
-  add AX,8
-  call JrDrawSpr
-  add AX,8
-  call JrDrawSpr
-  add AX,8
-  call JrDrawSpr
-  add AX,8
-  call JrDrawSpr
-  add AX,8
-  call JrDrawSpr
-  add AX,8
-  call JrDrawSpr
-
-  jmp endGameLoop
-  ; test
-  ;mov BX,00h
-  ;mov AL,72
-  ;mov ES:[BX],AL
-  ;jmp endGameLoop
-
-  ;mov BX,0
-  ;mov SI,BX
-  ;mov BX,80h ; JR.BIN offset 80h, X
-;TestVid:
-  ;mov AL,[BX+jrpieces] ; get pair of pixels
-  ;call JrSetPixel ; set video memory
-  ;inc BX ; next pair
-  ;inc SI
-
-  ;push BX ; backup offset
-  ;mov AX,SI ; place in AX
-  ;mov CL,8 ; divide by 8 (one row is 8 bytes)
-  ;div CL ; AL now contains which row we're drawing
-  ;xor BH,BH ; 0 out BH
-  ;mov BL,AH ; place column in BL
-  ;xor AH,AH ; remove column
-  ;mov CL,4 ; divide by 4 (hard to explain, but trust me. this is due to the way video memory is stored in the PCjr/Tandy 1000)
-  ;div CL ; AH now contains which bank of video memory we want to change
-  ;mov AL,AH ; move it down to AL
-  ;xor AH,AH ; remove it from AH
-  ;mov CL,0A0h ; multiply by 160 (each row of pixels on the screen is 160 bytes, memory is linear so it wraps around)
-  ;mul CL ; now the pixel will be placed in the proper row of the screen
-  ;mov CX,AX ; place row in CX
-  ;add CX,BX ; add column we saved in BL
-  ;pop BX ; restore offset
-  ;push BX ; but back it up again...
-  ;mov AX,SI ; and place in AX again :p
-  ;mov DX,20h ; divide by 32 (I decided to store the graphics, 1 bank at a time, so each 32 bytes is one bank, see PCjr/Tandy 1000 technical reference)
-  ;div DL ; now AL is 0, 1, 2, or 3
-  ;mov DL,AL ; place bank in DL
-  ;pop BX ; restore offset again
-  ;cmp SI,80h ; check if we've drawn the whole bitmap
-  ;jb TestVid ; if not, then obviously we must continue
-  ;jmp endGameLoop
 
 NoTandy:
 
@@ -257,16 +171,16 @@ InitGame:
 
 ClearScreen:
   ; ---------- clear screen
-  mov AH,0       ; Video function 0, set mode
+  xor AH,AH      ; Video function 0, set mode
   mov AL,[video] ; get video mode
   int 10h        ; call BIOS video
 
   startGameLoop:
     ; ---------- clear screen
-    mov AH,2 ; BIOS video function 2, set cursor position
-    mov BH,0 ; page 0
-    mov DX,0 ; Row 0, Column 0
-    int 10h  ; call BIOS video
+    mov AH,2  ; BIOS video function 2, set cursor position
+    xor BH,BH ; page 0
+    xor DX,DX ; Row 0, Column 0
+    int 10h   ; call BIOS video
 
     ; ---------- say whose turn it is
     cmp [video],3       ; check if we're in text mode
@@ -278,7 +192,7 @@ ClearScreen:
     add  BX,1           ; add 1 (1 = X, 2 = O)
     mov  AL,[pieces+BX] ; get player char
     mov  AH,0Eh         ; function 0E, output char to screen
-    mov  BX,0           ; set BX to 0
+    xor  BX,BX          ; set BX to 0
     int  10h            ; call BIOS function 0E
     lea  DX,CRLF        ; load address of CRLF in DX
     call WriteLn        ; new line
@@ -346,7 +260,7 @@ drawBoard   PROC
             ;
             ; each iteration of this loop will print one strip of the board to the screen
             ;
-drawBLoop:  mov BX,0           ; set register where string offset goes to 0
+drawBLoop:  xor BX,BX          ; set register where string offset goes to 0
             test AH,1          ; check LSB
             jz drawBDeter      ; if LSB is 0, skips following command
             mov BX,0Bh         ; change offset to 11, so we print the 2nd board strip
@@ -593,7 +507,7 @@ tryMove    PROC
            ;
            ; determine which row and column to modify
            ;
-           mov AH,0  ; 0 out upper register
+           xor AH,AH ; 0 out upper register
            mov CL,3  ; will divide by 3
            div CL    ; divide AX(L) by 3
                      ; AX = column row
@@ -685,7 +599,7 @@ twContinue: cmp AX,0Dh      ; check if row is X X X
             ;
             ; test 2 - win by column
             ;
-            mov BX,0        ; iteration 0
+            xor BX,BX       ; iteration 0
             shr DX,1        ; remove player from data
 twTest2:    mov AX,DX       ; place data in AX
             and AX,1Fh      ; only want first 5 bits
@@ -711,7 +625,7 @@ twTest2:    mov AX,DX       ; place data in AX
             ;
 twTest3:    cmp CL,1        ; check if play was in middle row
             je twTest4      ; if so, check if play was in middle of board
-            mov BL,0        ; iteration 0
+            xor BL,BL       ; iteration 0
             mov DH,1        ; each iteration, we will add 1 to the column
             cmp CH,0        ; test column 0
             jz twTest31     ; if it is, we're fine
@@ -757,7 +671,7 @@ twTest4:    cmp CH,1        ; check if play was in middle column
             inc BX          ; 1 = X 2 = O
             shr AX,1        ; remove player
             and AX,1Fh      ; get row 0
-            mov DL,0        ; column 0
+            xor DL,DL       ; column 0
             call getColumn  ; check 0,0
             cmp DL,BL       ; see if 0,0 is owned by this player
             jne twTest4R    ; if it isn't, try going right to left
@@ -777,7 +691,7 @@ twTest4R:   mov AX,gameVars ; get game data
             jne twEnd       ; if it isn't, keep playing...
             mov AX,gameVars ; get game data
             shr AX,11       ; get row 2
-            mov DL,0        ; column 0
+            xor DL,DL       ; column 0
             call getColumn  ; check 0,2
             cmp DL,BL       ; see if 0,2 is owned by this player
             je twWin        ; if it is, they win
@@ -821,7 +735,7 @@ extractRow  PROC
             ; grab each column and place in memory
             ;
 exRowIt:    mov AL,BL          ; copy row data into AL
-            mov DX,0           ; zero out DX
+            xor DX,DX          ; zero out DX
             mov DL,BH          ; use iteration as column
             call getColumn     ; get column
             mov CX,BX          ; get column and row
@@ -858,7 +772,7 @@ extractRow  ENDP
 getColumn PROC
           mov CX,0FF03h    ; set iteration 255 and CL to 3 for division
 gcLoop:   inc CH      ; increment iteration
-          mov AH,0    ; clear out possible remainder from previous iteration
+          xor AH,AH   ; clear out possible remainder from previous iteration
           div CL      ; divide board in AX by 3
           cmp CH,DL   ; compare current column to requested column
           jnz gcLoop  ; if we haven't reached the column we want, try again
@@ -917,7 +831,7 @@ JrSetPixel ENDP
 JrDrawSpr PROC
           mov DX,0B800h ; offset of PCjr/Tandy video
           mov ES,DX     ; place in ES
-          mov SI,0      ; begin with pixel pair 0
+          xor SI,SI     ; begin with pixel pair 0
 JDSloop:  push AX  ; backup "coords"
           push BX  ; backup offset
           ;
