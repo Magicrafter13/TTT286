@@ -44,8 +44,20 @@ videos    DB  " 1 - Text only (default)",'$',     ; add 19h to get next line
 gameVars  DW  0                                   ; lsb is the current player (0 = x, 1 = y), bits 1-15 are board layout (5 bits per row)
 board     DB  "   ³   ³   ÄÄÄÅÄÄÄÅÄÄÄ ! ³ ! ³ ! " ; building blocks of the game board
 pieces    DB  " XO",0                             ; possible pieces to place on board
-jrdata    DB  "JR.BIN",0                          ; location of binary data for PCjr/Tandy graphics
-jrpieces  DB  24 DUP ('0123456789ABCDEF')         ; reserve 384 bytes for the PCjr/Tandy graphics
+          ; PCjr/Tandy graphics data
+          ;   sprite    0 = empty (space)
+          ;   sprite    1 = X
+          ;   sprite    2 = O
+          ;   sprite  3-6 = 'YOUR MOVE '
+          ;   sprite    7 = fancy x
+          ;   sprite    8 = fancy o
+          ;   sprite 9-13 = "WINNER:"
+          ;   sprite   14 = vertical bar
+          ;   sprite   15 = horizontal bar
+          ;   sprite   16 = horizontal/vertical cross bar
+          ;   sprite   17 = trophy
+jrdata    DB  "JR.BIN",0,'$'                      ; location of binary data for PCjr/Tandy graphics
+jrpieces  DB  900h DUP ('#')        ; reserve 2176 bytes for the PCjr/Tandy graphics
 video     DB  0,3,9                               ; video mode 3 (80x25 text)
 pattern   equ 88h                                 ; takes the binary form of 10001000, which, if shifted right,
                                                   ; will let me draw board chunk 0,0,0,1,0,0,0,1,0,0,0 while only using 1 byte for the pattern
@@ -116,9 +128,8 @@ GetVideo:
   mov AH,0       ; Video function 0, set mode
   mov AL,[video] ; get video mode
   int 10h        ; call BIOS video
-  mov DX,03D8h  ; Mode Select
-  mov AL,0Bh    ; high-res clock, 320x200 graphics, enable video signal
-  ;mov AL,88h
+  mov DX,03D8h   ; Mode Select
+  mov AL,0Bh     ; high-res clock, 320x200 graphics, enable video signal
   out DX,AL
   mov DX,03B8h
   mov AL,88h
@@ -132,164 +143,104 @@ GetVideo:
   ;jc NoFile        ; if carry flag set, error
   mov BX,AX        ; place file handle in BX
   mov AH,3Fh       ; DOS function 3F, read from file or device
-  mov CX,0180h     ; load 384 bytes
+  mov CX,0900h     ; load 2176 bytes
   lea DX,jrpieces  ; set address to load data
   int 21h          ; call DOS
 
+  jmp InitGame
+
   mov BX,0B800h ; address of video buffer
   mov ES,BX     ; store for later in ES
+
+  mov BX,80h
+  mov AX,0
+  call JrDrawSpr
+  add AX,8
+  call JrDrawSpr
+  sub BX,100h
+  add AX,8
+  call JrDrawSpr
+  add AX,8
+  call JrDrawSpr
+  add AX,8
+  call JrDrawSpr
+  add AX,8
+  call JrDrawSpr
+  add AX,8
+  call JrDrawSpr
+  add AX,8
+  call JrDrawSpr
+  call JrDrawSpr
+  add AX,8
+  call JrDrawSpr
+  add AX,8
+  call JrDrawSpr
+  add AX,8
+  call JrDrawSpr
+  add AX,8
+  call JrDrawSpr
+  add AX,8
+  call JrDrawSpr
+  add AX,8
+  call JrDrawSpr
+  add AX,8
+  call JrDrawSpr
+  add AX,8
+  call JrDrawSpr
+  add AX,8
+  call JrDrawSpr
+  add AX,8
+  call JrDrawSpr
+
+  jmp endGameLoop
   ; test
   ;mov BX,00h
   ;mov AL,72
   ;mov ES:[BX],AL
   ;jmp endGameLoop
-  mov AX,0
-  mov BX,80h
-  mov CX,0
-  mov DX,0
-TestVid:
-  mov AL,[BX+jrpieces]
-  ;add AL,BL
-  call JrSetPixel
-  inc BX
 
-  push BX
-  mov AX,BX
-  sub AX,80h
-  mov CL,8
-  div CL
-  xor BH,BH
-  mov BL,AH
-  ;mov AL,AH
-  xor AH,AH
-  mov CL,4
-  div CL
-  mov AL,AH
-  xor AH,AH
-  mov CL,0A0h
-  mul CL
-  mov CX,AX
-  add CX,BX
-  pop BX
-  push BX
-  mov AX,BX
-  sub AX,80h
-  mov DX,20h
-  div DL
-  mov DL,AL
-  pop BX
-  cmp BX,100h
-  jb TestVid
-  jmp endGameLoop
-  ;mov DL,0Dh ; 13
-  ;shl AX,DL ; equivalent to multiplying AX by 2000h (8192)
+  ;mov BX,0
+  ;mov SI,BX
+  ;mov BX,80h ; JR.BIN offset 80h, X
+;TestVid:
+  ;mov AL,[BX+jrpieces] ; get pair of pixels
+  ;call JrSetPixel ; set video memory
+  ;inc BX ; next pair
+  ;inc SI
 
-  inc CX
-  ;push CX
-  ;mov AX,BX
-  ;shr AX,1
-  ;shr AX,1
-  ;shr AX,1
-  ;mov DX,AX
-  ;mov CX,160
-  ;mul CX
-  ;pop CX
-  ;add CX,AX
-  ;mov AX,DX
-  ;mov CX,4
-  ;div CL
-  ;mov DL,AH
-  ;mov DH,0
-  ;cmp BX,180h
-  ;jb TestVid
+  ;push BX ; backup offset
+  ;mov AX,SI ; place in AX
+  ;mov CL,8 ; divide by 8 (one row is 8 bytes)
+  ;div CL ; AL now contains which row we're drawing
+  ;xor BH,BH ; 0 out BH
+  ;mov BL,AH ; place column in BL
+  ;xor AH,AH ; remove column
+  ;mov CL,4 ; divide by 4 (hard to explain, but trust me. this is due to the way video memory is stored in the PCjr/Tandy 1000)
+  ;div CL ; AH now contains which bank of video memory we want to change
+  ;mov AL,AH ; move it down to AL
+  ;xor AH,AH ; remove it from AH
+  ;mov CL,0A0h ; multiply by 160 (each row of pixels on the screen is 160 bytes, memory is linear so it wraps around)
+  ;mul CL ; now the pixel will be placed in the proper row of the screen
+  ;mov CX,AX ; place row in CX
+  ;add CX,BX ; add column we saved in BL
+  ;pop BX ; restore offset
+  ;push BX ; but back it up again...
+  ;mov AX,SI ; and place in AX again :p
+  ;mov DX,20h ; divide by 32 (I decided to store the graphics, 1 bank at a time, so each 32 bytes is one bank, see PCjr/Tandy 1000 technical reference)
+  ;div DL ; now AL is 0, 1, 2, or 3
+  ;mov DL,AL ; place bank in DL
+  ;pop BX ; restore offset again
+  ;cmp SI,80h ; check if we've drawn the whole bitmap
+  ;jb TestVid ; if not, then obviously we must continue
   ;jmp endGameLoop
-  cmp CX,8
-  jb TestVid
-  sub CX,8
-  inc DX
-  cmp DX,3;0Fh
-  jb TestVid
-  jmp endGameLoop
-
-  mov BX,CX ; place linear offset in BX
-  ;add BX,80h ; next character
-  mov DL,[BX+jrpieces] ; use that to get color data
-  mov BX,0;0B800h ; set video address
-  mov AX,CX ; place linear offset in AX
-  push CX ; backup linear offset
-  mov CL,8 ; set to 8
-  div CL ; divide by 8
-  push AX ; backup results
-  mov AL,AH ; get remainder
-  mov AH,0 ; clear out remainder
-  add BX,AX ; add number between 0 and 7 to video address
-  pop AX ; restore results
-  mov AH,0
-  mov CX,2000h ; set CX to 2000 (offset between horizontal rows)
-  mul CX ; 2000 * remainder
-  add BX,AX ; add multiple of 2000 to video address
-  mov ES:[BX],DL
-  pop CX ; restore linear offset
-  inc CX ; += 1
-  cmp CX,800;20h ; 32, 4 rows of 8 bytes
-  jb TestVid
-  jmp endGameLoop
-
-  ;mov BX,CX
-  ;mov DL,[BX+jrpieces]
-  ;mov AX,CX
-  ;div CX
-  ;mov BH,0
-  ;mov BL,AL
-  ;mov AL,AH
-  ;mov AH,0
-  ;mov DX,2000h
-  ;mul DX
-  ;add BX,AX
-  ;mov ES:[BX],DL
-  ;inc CX
-  ;cmp CX,0FFh
-  ;jb TestVid
-  ;mov DL,0E7h
-  ;mov ES:[BX],DL
-  ;add BX,2000h
-  ;inc CX
-  ;cmp CX,5
-  ;jb TestVid
-  ;jmp endGameLoop
-  ;mov DL,[BX+jrpieces]
-  ;add DL,80h
-  ;push BX
-  ;mov BX,AX
-  ;mov CH,0A0h
-  ;mov CL,AH
-  ;mov AH,0
-  ;mul CH
-  ;mov CH,0
-  ;add AX,CX
-  ;mov BX,AX
-  ;mov ES:[BX],DL
-  ;pop BX
-  ;inc BX
-  ;inc AH
-  ;cmp AH,8
-  ;jne TestVid
-  ;inc AL
-  ;sub AH,8
-  ;cmp BX,0180h
-  ;jb TestVid
-
-  mov AH,7
-  int 21h
-  jmp endGameLoop
 
 NoTandy:
 
   jmp InitGame     ; begin game
 
 NoFile:
-  ;mov DX,BX        ; place filename address in DX
-  ;call Write       ; print filename
+  mov DX,BX        ; place filename address in DX
+  call Write       ; print filename
   lea DX,notfound  ; not found message
   call WriteLn     ; print rest of message
   jmp endGameLoop  ; exit
@@ -318,6 +269,8 @@ ClearScreen:
     int 10h  ; call BIOS video
 
     ; ---------- say whose turn it is
+    cmp [video],3       ; check if we're in text mode
+    jne drawGame        ; if not, don't print text
     lea  DX,moveText    ; Loads the address of the 'words' string, into the DX register
     call Write          ; Ouputs moveText to console, followed by CRLF
     mov  BX,[gameVars]  ; load gameVars in BX
@@ -330,6 +283,7 @@ ClearScreen:
     lea  DX,CRLF        ; load address of CRLF in DX
     call WriteLn        ; new line
 
+  drawGame:
     call drawBoard
 
     ; ---------- get user input
@@ -381,17 +335,10 @@ main ENDP
 ; Draw Board Procedure      |
 ;---------------------------|
 drawBoard   PROC
-            cmp [video],3 ; see if we're in text mode
-            je dbText     ; if so, do the usual
-            cmp [video],9 ; check for PCjr/Tandy 1000 med-res mode
-            je dbTandy    ; if so, call routine
-            ret           ; unsure of what to do, so do nothing
-dbTandy:    call drawBoardJr
-            ret
             ;
             ; initialize board to be drawn (11 lines, with AH as "tile" pattern)
             ;
-dbText:     mov CL,0Bh         ; set count to 11
+            mov CL,0Bh         ; set count to 11
             mov AH,pattern     ; place board pattern in AH
 
             ;
@@ -429,7 +376,15 @@ drawBDeter: ;-----------------------------------------|
 drawBCont:  ;
             ; now that we know which row to print, it's time to print it
             ;
-            add BX,OFFSET board ; combine address of board layouts with offset
+            cmp [video],3       ; see if we're in text mode
+            je dbText           ; if so, print text like usual
+            cmp [video],9       ; check if we're in PCjr/Tandy graphics mode
+            je dbJr             ; draw graphics, PCjr/Tandy
+            jmp dbEnd           ; all else fails, just do nothing
+            ;
+            ; print row
+            ;
+dbText:     add BX,OFFSET board ; combine address of board layouts with offset
             mov DX,0Bh          ; tell WriteText to print 11 characters
             push CX             ; save count (CL)
             push AX             ; save remaining pattern (AH)
@@ -438,7 +393,41 @@ drawBCont:  ;
             call Write          ; will output CRLF to the console
             pop AX              ; get pattern back! (AH)
             pop CX              ; get count back; (CL)
-            shr AH,1            ; shift pattern right, to get rid of previous pattern, and to see the next
+            jmp dbEnd           ; finish iteration
+            ;
+            ; draw row (PCjr/Tandy)
+            ;
+dbJr:       push CX             ; save count (CL)
+            push AX             ; save remaining pattern (AH)
+            mov AX,BX           ; board pattern offset
+            mov DX,0Bh          ; 11
+            div DL              ; divide by 11 (so we get 0, 1, or 2)
+            jmp dbJrCont
+            cmp AX,2            ; see if it's one of those rows
+            jne dbJrCont        ; if not, continue
+            push CX
+            sub CL,2
+            shr CX,1
+            shr CX,1
+            and CL,3            ; same logic as drawBDeter
+            mov DX,gameVars     ; place game data in DX
+            shr DX,1            ; remove player
+            shr DX,CL
+            shr DX,CL
+            shr DX,CL
+            and DX,1Fh
+            pop CX
+dbJrCont:   mov BX,AX
+            mov AX,0Bh          ; 11
+            sub AL,CL           ; inverted count (instead of 11-1, it's now 0-10)
+            call drawBoardJr    ; draw row, PCjr/Tandy style
+            pop AX              ; get pattern back (AH)
+            pop CX              ; get count back (CL)
+            jmp dbEnd           ; finish iteration
+            ;
+            ; after row is drawn:
+            ;
+dbEnd:      shr AH,1            ; shift pattern right, to get rid of previous pattern, and to see the next
             dec CL              ; decrease count by one, since part of the board has now been drawn
             jnz drawBLoop       ; draw another part of the board if count isn't 0, otherwise stop doing that!
 
@@ -448,25 +437,146 @@ drawBoard   ENDP
 ; Draw Board Procedure ENDS |
 ;---------------------------|
 
+;-------------------------------------------|
+; Draw Board Procedure, for PCjr/Tandy      |
+;   BX = row type                           |
+;    0 > vertical bars                      |
+;    1 > horizontal bar + crosses           |
+;    2 > vertical bar (data)                |
+;   AX = vertical offset (row technically)  |
+;-------------------------------------------|
 drawBoardJr PROC
-mov DX,03DAh ; PCjr/Tandy Video data address, 'Mode Control 1' register
-mov AL,10h   ; enable 16 color graphics
-out DX,AL    ; send byte to video
-add DX,4     ; select 'Border Color' register
-mov AL,6     ; color is now brown
-out DX,AL    ; send byte to video
+;mov DX,03DAh ; PCjr/Tandy Video data address, 'Mode Control 1' register
+;mov AL,10h   ; enable 16 color graphics
+;out DX,AL    ; send byte to video
+;add DX,4     ; select 'Border Color' register
+;mov AL,6     ; color is now brown
+;out DX,AL    ; send byte to video
 
-sub DX,4     ; select 'Mode Control 1' register
-mov AL,3     ; bit 0 = high-bandwidth, bit 1 = graphics mode
-out DX,AL    ; send byte to video
-mov DX,03DEh ; select 'Mode Control 2' register
-mov AL,14h   ; 1 = enable border color, 4 = enable 16 colors
-out DX,AL
+;sub DX,4     ; select 'Mode Control 1' register
+;mov AL,3     ; bit 0 = high-bandwidth, bit 1 = graphics mode
+;out DX,AL    ; send byte to video
+;mov DX,03DEh ; select 'Mode Control 2' register
+;mov AL,14h   ; 1 = enable border color, 4 = enable 16 colors
+;out DX,AL
 
-mov AX,0B800h; PCjr/Tandy video offset in memory
-mov ES,AX    ; place in Extra Segment register
-ret
+;mov AX,0B800h; PCjr/Tandy video offset in memory
+;mov ES,AX    ; place in Extra Segment register
+;ret
+            shl AX,1
+            shl AX,1 ; multiply offset by 4 (because of vram banks, we only multiply by 4 instead of 16)
+            mov CL,0A0h ; 160
+            mul CL ; multiply by 160
+            ;
+            ; draw standard empty row, with vertical bars
+            ;
+dbJr0:      cmp BX,0 ; check if vertical bar row
+            jne dbJr1 ; not vertical bar row, try the others
+            add AX,18h ; add 24
+            push AX ; backup offset
+            mov BX,700h ; sprite 14, vertical bar
+            call JrDrawSpr ; draw first bar
+            sub BX,80h ; move back to sprite 14
+            pop AX ; restore offset
+            add AX,20h ; add 24
+            call JrDrawSpr ; draw second bar
+            ret
+            ;
+            ; draw horizontal row (crosses)
+            ;
+dbJr1:      cmp BX,1 ; check if horizontal bar + crosses row
+            jne dbJr2 ; must be vertical bar (data) row
+            push AX ; backup offset
+            mov BX,780h ; sprite 15, horizontal bar
+            call JrDrawSpr ; draw horizontal bar 1
+            sub BX,80h ; sprite 15
+            pop AX ; restore offset
+            add AX,8 ; next grid space
+            push AX ; backup offset
+            call JrDrawSpr ; draw horizontal bar 2
+            sub BX,80h ; sprite 15
+            pop AX ; restore offset
+            add AX,8 ; next grid space
+            push AX ; backup offset
+            call JrDrawSpr ; draw horizontal bar 3
+            pop AX ; restore offset
+            add AX,8 ; next grid space
+            push AX ; backup offset
+            call JrDrawSpr ; draw cross bar 1
+            sub BX,100h ; sprite 15
+            pop AX ; restore offset
+            add AX,8 ; next grid space
+            push AX ; backup offset
+            call JrDrawSpr ; draw horizontal bar 4
+            sub BX,80h ; sprite 15
+            pop AX ; restore offset
+            add AX,8 ; next grid space
+            push AX ; backup offset
+            call JrDrawSpr ; draw horizontal bar 5
+            sub BX,80h ; sprite 15
+            pop AX ; restore offset
+            add AX,8 ; next grid space
+            push AX ; backup offset
+            call JrDrawSpr ; draw horizontal bar 6
+            pop AX ; restore offset
+            add AX,8 ; next grid space
+            push AX ; backup offset
+            call JrDrawSpr ; draw cross bar 2
+            sub BX,100h ; sprite 15
+            pop AX ; restore offset
+            add AX,8 ; next grid space
+            push AX ; backup offset
+            call JrDrawSpr ; draw horizontal bar 7
+            sub BX,80h ; sprite 15
+            pop AX ; restore offset
+            add AX,8 ; next grid space
+            push AX ; backup offset
+            call JrDrawSpr ; draw horizontal bar 8
+            sub BX,80h ; sprite 15
+            pop AX ; restore offset
+            add AX,8 ; final grid space
+            call JrDrawSpr ; draw horizontal bar 9
+            ret
+            ;
+            ; draw row 1, 5, or 9 (where pieces show up)
+            ;
+dbJr2:      add AX,8 ; first play piece grid space
+            push AX ; backup offset
+            mov BX,17h ; get piece 1
+            mov CL,[board+BX] ; place in CL
+            mov BL,CL ; move to BL
+            shl BX,7 ; multiply by 80h
+            call JrDrawSpr ; draw first piece of row
+            pop AX ; restore offset
+            add AX,10h ; next required grid space
+            push AX ; backup offset
+            mov BX,700h ; sprite 14 vertical bar
+            call JrDrawSpr ; draw first vertical bar
+            pop AX ; restore offset
+            add AX,10h ; next required grid space
+            push AX
+            mov BX,1Bh ; get piece 2
+            mov CL,[board+BX] ; place in CL
+            mov BL,CL ; move to BL
+            shl BX,7 ; multiply by 80h
+            call JrDrawSpr ; draw second piece of row
+            pop AX ; restore offset
+            add AX,10h ; next required grid space
+            push AX ; backup offset
+            mov BX,700h ; sprite 14 vertical bar
+            call JrDrawSpr ; draw second vertical bar
+            pop AX ; restore offset
+            add AX,10h ; next required grid space
+            mov BX,1Fh ; get piece 3
+            mov CL,[board+BX] ; place in CL
+            mov BL,CL ; move to BL
+            shl BX,7 ; multiply by 80h
+            call JrDrawSpr
+            ret
 drawBoardJr ENDP
+;-------------------------------------------|
+; Draw Board Procedure, for PCjr/Tandy ENDS |
+;-------------------------------------------|
 
 ;-------------------------|
 ; Try Move Procedure      |
@@ -711,8 +821,11 @@ exRowIt:    mov AL,BL          ; copy row data into AL
             mov CX,BX          ; get column and row
             push BX            ; save column and row
             mov BX,DX          ; we're going to add DL to an address offset
+            mov AL,DL
+            cmp [video],3
+            jne exRowGraf
             mov AL,[pieces+BX] ; get piece character
-            lea BX,board       ; get board address
+exRowGraf:  lea BX,board       ; get board address
             add BX,17h         ; add 23 (22 + 1 offset)
             shr CX,8           ; get column alone
             shl CL,1           ; DL * 2
@@ -751,57 +864,101 @@ getColumn ENDP
 ; Get Column Procedure ENDS |
 ;---------------------------|
 
-;
-; Routine to set a pixel on the screen.  AL is the color (0-15), CX is the
-; column (0-159), DX is the row (0-199).
-;
-JrSetPixel            PROC
-	                  ;
-	                  ; Save registers.
-	                  ;
-                      push AX
-                      push BX
-                      push CX
-                      push DX
-	                  ;
-	                  ; ES addresses the video buffer at 0B800h.
-	                  ;
-                      mov BX,0B800h
-                      mov ES,BX
-	                  ;
-	                  ; Memory is linear in this mode, and there are 320 bytes per line.
-	                  ; Compute the offset of the start of the line from the beginning of
-	                  ; the buffer.
-	                  ;
-                      push AX ; save color
-                      mov AX,DX
-                      mov DX,4
-                      div DL
-                      mov DL,AH
-                      mov AX,2000h
-                      mul DX
-                      mov BX,AX ; now we have the correct segment for this pixel row
-                      pop AX ; restore color
-	                  ;
-	                  ; There are 2 pixels per byte, so divide the column by 2 and add to
-	                  ; the offset to get the address of the byte containing the pixel to
-	                  ; be set.  At the same time, save the carry flag, which is 1 if the
-	                  ; pixel is odd.
-	                  ;
-                      add BX,CX
-	                  ;
-	                  ; Write the byte back to the video buffer.
-	                  ;
-JrSetPixel_Writeback: mov ES:[BX],AL
-	                  ;
-	                  ; Restore registers and return.
-	                  ;
-                      pop DX
-                      pop CX
-                      pop BX
-                      pop AX
-                      ret
-JrSetPixel            ENDP
+;--------------------------------------|
+; PCjr/Tandy, Set Pixel Procedure      |
+;   AL = color (0-15)                  |
+;   CX = column (video offset)         |
+;   DX = video bank (0-3)              |
+;   ES must be B800                    |
+;  Preserves BX                        |
+;--------------------------------------|
+JrSetPixel PROC
+	       ;
+	       ; Save registers.
+	       ;
+           push BX ; this is the only register not required by this procedure, so there's a good chance it's being used for something
+           push AX ; save color
+           ;
+	       ; Set Base register to correct bank of memory
+           ;
+           mov AX,2000h
+           mul DX
+           mov BX,AX ; now we have the correct segment for this pixel row
+           pop AX ; restore color
+           ;
+           ; Add "column" offset
+           ;
+           add BX,CX
+	       ;
+	       ; Write the byte to the video buffer.
+	       ;
+           mov ES:[BX],AL
+	       ;
+	       ; Restore registers and return.
+	       ;
+           pop BX
+           ret
+JrSetPixel ENDP
+;--------------------------------------|
+; PCjr/Tandy, Set Pixel Procedure ENDS |
+;--------------------------------------|
+
+;------------------------------|
+; PCjr/Tandy, draw sprite      |
+;   BX = address of sprite     |
+;   AX = video offset/"coords" |
+;------------------------------|
+JrDrawSpr PROC
+          mov DX,0B800h ; offset of PCjr/Tandy video
+          mov ES,DX     ; place in ES
+          mov SI,0      ; begin with pixel pair 0
+JDSloop:  push AX  ; backup "coords"
+          push BX  ; backup offset
+          ;
+          ; Set Video offset
+          ;
+          mov DX,AX   ; place "coords" in DX
+          mov AX,SI   ; current pixels in AX
+          mov CL,8    ; divide by 8 (one row is 8 bytes)
+          div CL      ; AL now contains which row we're drawing
+          xor BH,BH   ; 0 out BH
+          mov BL,AH   ; place column in BL
+          xor AH,AH   ; remove column
+          mov CL,4    ; divide by 4 (hard to explain, but trust me. this is due to the way video memory is stored in the PCjr/Tandy 1000)
+          div CL      ; AH now contains which bank of video memory we want to change
+          mov AL,AH   ; move it down to AL
+          xor AH,AH   ; remove it from AH
+          mov CL,0A0h ; multiply by 160 (each row of pixels on the screen is 160 bytes, memory is linear so it wraps around)
+          mul CL      ; now the pixel will be placed in the proper row of the screen
+          mov CX,AX   ; place row in CX
+          add CX,BX   ; add column we saved in BL
+          add CX,DX   ; add "coords" to AX
+          ;
+          ; Set Video bank
+          ;
+          mov AX,SI  ; current pixels in AX
+          mov DX,20h ; divide by 32 (I decided to store the graphics, 1 bank at a time, so each 32 bytes is one bank, see PCjr/Tandy 1000 technical reference)
+          div DL     ; now AL is 0, 1, 2, or 3
+          mov DL,AL  ; place bank in DL
+          pop BX     ; restore offset
+          ;
+          ; Get sprite data, and draw
+          ;
+          mov AL,[BX+jrpieces] ; get pair of pixels
+          call JrSetPixel      ; set video memory
+          ;
+          ; Continue
+          ;
+          pop AX     ; restore "coords"
+          inc BX     ; next pair
+          inc SI     ; next pair
+          cmp SI,80h ; check if we've drawn the whole bitmap (8x16 bytes)
+          jb JDSloop ; if not, then obviously we must continue
+          ret
+jrDrawSpr ENDP
+;------------------------------|
+; PCjr/Tandy, draw sprite      |
+;------------------------------|
 
 MyCode ENDS
 ;-------------------|
