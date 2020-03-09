@@ -45,17 +45,17 @@ gameVars  DW  0                                   ; lsb is the current player (0
 board     DB  "   ³   ³   ÄÄÄÅÄÄÄÅÄÄÄ ! ³ ! ³ ! " ; building blocks of the game board
 pieces    DB  " XO",0                             ; possible pieces to place on board
           ; PCjr/Tandy graphics data
-          ;   sprite    0 = empty (space)
-          ;   sprite    1 = X
-          ;   sprite    2 = O
-          ;   sprite  3-6 = 'YOUR MOVE '
-          ;   sprite    7 = fancy x
-          ;   sprite    8 = fancy o
-          ;   sprite 9-13 = "WINNER:"
-          ;   sprite   14 = vertical bar
-          ;   sprite   15 = horizontal bar
-          ;   sprite   16 = horizontal/vertical cross bar
-          ;   sprite   17 = trophy
+          ;   sprite    0 = empty (space)                 -   0h
+          ;   sprite    1 = X                             -  80h
+          ;   sprite    2 = O                             - 100h
+          ;   sprite  3-6 = 'YOUR MOVE '                  - 180h, 200h, 280h, 300h
+          ;   sprite    7 = fancy x                       - 380h
+          ;   sprite    8 = fancy o                       - 400h
+          ;   sprite 9-13 = "WINNER:"                     - 480h, 500h, 580h, 600h
+          ;   sprite   14 = vertical bar                  - 680h
+          ;   sprite   15 = horizontal bar                - 700h
+          ;   sprite   16 = horizontal/vertical cross bar - 780h
+          ;   sprite   17 = trophy                        - 800h
 jrdata    DB  "JR.BIN",0,'$'                      ; location of binary data for PCjr/Tandy graphics
 jrpieces  DB  900h DUP ('#')        ; reserve 2176 bytes for the PCjr/Tandy graphics
 video     DB  0,3,9                               ; video mode 3 (80x25 text)
@@ -309,6 +309,8 @@ ClearScreen:
     cmp AL,9          ; now subtract 9, that way if it is 0-8 we will trigger the carry flag
     jae userInput     ; if they did not input 1-9, then don't try anything (continue)
     call tryMove      ; attempt the requested move, if it is valid, the board will be updated, and the player will change
+    cmp DL,0          ; check if board was updated
+    jne userInput     ; if not, don't redraw
     jmp startGameLoop ; refresh screen
   printHelp:
     lea DX,helpText   ; get address of help message
@@ -583,6 +585,9 @@ drawBoardJr ENDP
 ;                         |
 ;  AL should be a value   |
 ;  from 0-8               |
+;  DL will return 0 if    |
+;   successful, and 1 or 2|
+;   if not                |
 ;-------------------------|
 tryMove    PROC
            ;
@@ -641,6 +646,7 @@ tmDonePos: shl AX,1        ; make room for player
            pop CX          ; get column and row data for easy win testing
            call testWin    ; if we've gotten this far, that means the board has changed, so lets check if the player has won
            xor gameVars,1  ; XOR LSB, which will change current player
+           xor DL,DL       ; set DL to 0, because we were successful in updating the board
 tmFinish:  ret
 tryMove    ENDP
 ;-------------------------|
