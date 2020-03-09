@@ -27,8 +27,8 @@ MyData    SEGMENT PUBLIC
 EXTRN CRLF:BYTE
 
 moveText  DB  "Your move, ",'$'
-copyright DB  "$(c) 2020 - Matthew Rease",'$'
-thanks    DB  "$Thanks for playing!",'$'
+copyright DB  "(c) 2020 - Matthew Rease",'$'
+thanks    DB  "Thanks for playing!",'$'
 congrats  DB  " Wins the game!",'$'
 notfound  DB  " file wasn't found",'$'
 helpText  DB  "Help:",0Dh,0Ah,
@@ -153,11 +153,15 @@ NoTandy:
   jmp InitGame     ; begin game
 
 NoFile:
-  mov DX,BX        ; place filename address in DX
+  push DX          ; backup filename
+  xor AH,AH        ; BIOS video function 0, set video mode
+  mov AL,[video+1] ; restore original video mode
+  int 10h          ; call BIOS video
+  pop DX           ; restore filename
   call Write       ; print filename
   lea DX,notfound  ; not found message
   call WriteLn     ; print rest of message
-  jmp endGameLoop  ; exit
+  jmp ExitGame     ; exit
 
 InitGame:
   ; ---------- initialize game
@@ -234,11 +238,14 @@ ClearScreen:
     jmp ClearScreen   ; refresh screen (if they print help repeatedly they might push the gameboard offscreen, we don't want that to happen)
   endGameLoop:
 
+  xor AH,AH        ; BIOS video function 0, set video mode
+  mov AL,[video+1] ; get original video mode before program execution
+  int 10h          ; call BIOS video
   lea DX,copyright ; place address of copyright string in DX
   call WriteLn     ; print to screen
   lea DX,thanks    ; place address of thank you message in DX
   call WriteLn     ; print to screen
-
+ExitGame:
   EXIT 0 ; Calls macro to terminate program and sets ERRORLEVEL to 0
 
 main ENDP
