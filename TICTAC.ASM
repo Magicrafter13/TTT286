@@ -231,12 +231,16 @@ clsJr:
     mov BX,180h
     call JrDrawSpr
     add AX,8
+    add BX,80h
     call JrDrawSpr
     add AX,8
+    add BX,80h
     call JrDrawSpr
     add AX,8
+    add BX,80h
     call JrDrawSpr
     add AX,4
+    add BX,80h
     test gameVars,1
     jz turnJrCont
     add BX,80h
@@ -338,7 +342,6 @@ dbJr0:      push BX        ; backup pattern
             add AX,18h     ; add 24
             mov BX,700h    ; sprite 14, vertical bar
             call JrDrawSpr ; draw first bar
-            sub BX,80h     ; move back to sprite 14
             add AX,20h     ; add 32
             call JrDrawSpr ; draw second bar
             add AX,248h    ; beginning of next row
@@ -348,32 +351,28 @@ dbJr0:      push BX        ; backup pattern
 dbJr1:      push BX        ; backup pattern
             mov BX,780h    ; sprite 15, horizontal bar
             call JrDrawSpr ; draw horizontal bar 1
-            sub BX,80h     ; sprite 15
             add AX,8       ; next grid space
             call JrDrawSpr ; draw horizontal bar 2
-            sub BX,80h     ; sprite 15
             add AX,8       ; next grid space
             call JrDrawSpr ; draw horizontal bar 3
             add AX,8       ; next grid space
+            add BX,80h     ; sprite 16, cross
             call JrDrawSpr ; draw cross bar 1
-            sub BX,100h    ; sprite 15
+            sub BX,80h     ; sprite 15, horizontal bar
             add AX,8       ; next grid space
             call JrDrawSpr ; draw horizontal bar 4
-            sub BX,80h     ; sprite 15
             add AX,8       ; next grid space
             call JrDrawSpr ; draw horizontal bar 5
-            sub BX,80h     ; sprite 15
             add AX,8       ; next grid space
             call JrDrawSpr ; draw horizontal bar 6
             add AX,8       ; next grid space
+            add BX,80h     ; sprite 16, cross
             call JrDrawSpr ; draw cross bar 2
-            sub BX,100h    ; sprite 15
+            sub BX,80h     ; sprite 15, horizontal bar
             add AX,8       ; next grid space
             call JrDrawSpr ; draw horizontal bar 7
-            sub BX,80h     ; sprite 15
             add AX,8       ; next grid space
             call JrDrawSpr ; draw horizontal bar 8
-            sub BX,80h     ; sprite 15
             add AX,8       ; final grid space
             call JrDrawSpr ; draw horizontal bar 9
             add AX,230h    ; beginning of next row
@@ -691,12 +690,16 @@ twWinJr:    push AX ; backup winner offset
             mov BX,480h
             call JrDrawSpr
             add AX,8
+            add BX,80h
             call JrDrawSpr
             add AX,8
+            add BX,80h
             call JrDrawSpr
             add AX,8
+            add BX,80h
             call JrDrawSpr
             add AX,8
+            add BX,80h
             call JrDrawSpr
             add AX,0Ch
             pop BX ; restore winner offset
@@ -779,6 +782,7 @@ JrSetPixel ENDP
 ;   BX = address of sprite     |
 ;   AX = video offset/"coords" |
 ;  AX is preserved             |
+;  BX is preserved             |
 ;------------------------------|
 JrDrawSpr PROC
           mov DX,0B800h   ; offset of PCjr/Tandy video
@@ -836,7 +840,6 @@ JrDrawSpr PROC
           add DI,1E18h
           mov CX,8
           rep movsb
-          add BX,80h      ; restore BX
           ret
 JrDrawSpr ENDP
 ;------------------------------|
