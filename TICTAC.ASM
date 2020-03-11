@@ -228,22 +228,14 @@ clsJr:
     cmp [pieces+3],0
     jnz userInput
     mov AX,1B80h
-    push AX
     mov BX,180h
     call JrDrawSpr
-    pop AX
     add AX,8
-    push AX
     call JrDrawSpr
-    pop AX
     add AX,8
-    push AX
     call JrDrawSpr
-    pop AX
     add AX,8
-    push AX
     call JrDrawSpr
-    pop AX
     add AX,4
     test gameVars,1
     jz turnJrCont
@@ -344,88 +336,46 @@ dbJrStart:  cmp AX,1B80h   ; check if we've drawn all 11 rows
             jnz dbJr1
 dbJr0:      push BX        ; backup pattern
             add AX,18h     ; add 24
-            push AX        ; backup offset
             mov BX,700h    ; sprite 14, vertical bar
             call JrDrawSpr ; draw first bar
             sub BX,80h     ; move back to sprite 14
-            pop AX         ; restore offset
-
-            ;lea SI,grpieces
-            ;add SI,880h
-            ;mov DI,AX
-            ;add DI,8
-            ;mov CX,8
-;tmpLoop:    lea SI,grpieces
-            ;add SI,880h
-            ;mov DI,AX
-            ;add DI,10h
-            ;cld
-            ;mov CX,8
-            ;rep movsb
-            ;pop BX
-            ;shr BX,1
-            ;jmp dbJrStart
-
             add AX,20h     ; add 32
             call JrDrawSpr ; draw second bar
             add AX,248h    ; beginning of next row
             pop BX         ; restore pattern
             shr BX,1       ; next pattern
             jmp dbJrStart
-dbJr1:      ;jmp dbJrStart
-            push BX        ; backup pattern
-            push AX        ; backup offset
+dbJr1:      push BX        ; backup pattern
             mov BX,780h    ; sprite 15, horizontal bar
             call JrDrawSpr ; draw horizontal bar 1
             sub BX,80h     ; sprite 15
-            pop AX         ; restore offset
             add AX,8       ; next grid space
-            push AX        ; backup offset
             call JrDrawSpr ; draw horizontal bar 2
             sub BX,80h     ; sprite 15
-            pop AX         ; restore offset
             add AX,8       ; next grid space
-            push AX        ; backup offset
             call JrDrawSpr ; draw horizontal bar 3
-            pop AX         ; restore offset
             add AX,8       ; next grid space
-            push AX        ; backup offset
             call JrDrawSpr ; draw cross bar 1
             sub BX,100h    ; sprite 15
-            pop AX         ; restore offset
             add AX,8       ; next grid space
-            push AX        ; backup offset
             call JrDrawSpr ; draw horizontal bar 4
             sub BX,80h     ; sprite 15
-            pop AX         ; restore offset
             add AX,8       ; next grid space
-            push AX        ; backup offset
             call JrDrawSpr ; draw horizontal bar 5
             sub BX,80h     ; sprite 15
-            pop AX         ; restore offset
             add AX,8       ; next grid space
-            push AX        ; backup offset
             call JrDrawSpr ; draw horizontal bar 6
-            pop AX         ; restore offset
             add AX,8       ; next grid space
-            push AX        ; backup offset
             call JrDrawSpr ; draw cross bar 2
             sub BX,100h    ; sprite 15
-            pop AX         ; restore offset
             add AX,8       ; next grid space
-            push AX        ; backup offset
             call JrDrawSpr ; draw horizontal bar 7
             sub BX,80h     ; sprite 15
-            pop AX         ; restore offset
             add AX,8       ; next grid space
-            push AX        ; backup offset
             call JrDrawSpr ; draw horizontal bar 8
             sub BX,80h     ; sprite 15
-            pop AX         ; restore offset
             add AX,8       ; final grid space
-            push AX        ; backup offset
             call JrDrawSpr ; draw horizontal bar 9
-            pop AX         ; restore offset
             add AX,230h    ; beginning of next row
             pop BX         ; restore pattern
             shr BX,1       ; next pattern
@@ -554,30 +504,30 @@ drawPieceText ENDP
 ;   CX is preserved                         |
 ;-------------------------------------------|
 drawPieceJr PROC
-push CX ; backup row, column
-mov AL,CH
-shl AL,1
-shl AL,1
-inc AL
-xor AH,AH
-mov DX,280h ; 160 * 4
-mul DX
-mov BX,AX ; store video offset in BX
-mov AL,CL ; place column in AL
-xor AH,AH ; 0 out AH
-shl AX,1
-shl AX,1 ; column * 4
-mov DX,8 ; tiles are 8 bytes apart (16 pixels)
-mul DL ; column * 4 * 8 = "y coordinate"
-add AX,DX ; add one more column
-add AX,BX ; add to video offset (now offset is stored in AX)
-mov BX,gameVars ; get game data in BX
-and BX,1 ; only want player
-inc BX ; add 1 for proper offset
-shl BX,7 ; multiply by 80h (80h bytes per sprite)
-call JrDrawSpr
-pop CX
-ret
+            push CX         ; backup row, column
+            mov AL,CH       ; place row in AL
+            shl AL,1
+            shl AL,1        ; row * 4
+            inc AL          ; add 1
+            xor AH,AH       ; remove upper byte
+            mov DX,280h     ; 160 * 4 (y-distance between sprites)
+            mul DX          ; multiply
+            mov BX,AX       ; store video offset in BX
+            mov AL,CL       ; place column in AL
+            xor AH,AH       ; 0 out AH
+            shl AX,1
+            shl AX,1        ; column * 4
+            mov DX,8        ; tiles are 8 bytes apart (16 pixels)
+            mul DL          ; column * 4 * 8 = "y coordinate"
+            add AX,DX       ; add one more column
+            add AX,BX       ; add to video offset (now offset is stored in AX)
+            mov BX,gameVars ; get game data in BX
+            and BX,1        ; only want player
+            inc BX          ; add 1 for proper offset
+            shl BX,7        ; multiply by 80h (80h bytes per sprite)
+            call JrDrawSpr  ; draw the new piece to the screen
+            pop CX          ; restore row, column
+            ret
 drawPieceJr ENDP
 ;-------------------------------------------|
 ; Draw Piece Procedure, for PCjr/Tandy ENDS |
@@ -738,33 +688,21 @@ twWinText:  mov AH,2          ; BIOS video function 2, set cursor position
             jmp twEnd
 twWinJr:    push AX ; backup winner offset
             mov AX,1B80h
-            push AX
             mov BX,480h
             call JrDrawSpr
-            pop AX
             add AX,8
-            push AX
             call JrDrawSpr
-            pop AX
             add AX,8
-            push AX
             call JrDrawSpr
-            pop AX
             add AX,8
-            push AX
             call JrDrawSpr
-            pop AX
             add AX,8
-            push AX
             call JrDrawSpr
-            pop AX
             add AX,0Ch
             pop BX ; restore winner offset
             shl BX,7
             add BX,300h
-            push AX
             call JrDrawSpr
-            pop AX
             add AX,0Ch
             mov BX,880h
             call JrDrawSpr
@@ -840,11 +778,11 @@ JrSetPixel ENDP
 ; PCjr/Tandy, draw sprite      |
 ;   BX = address of sprite     |
 ;   AX = video offset/"coords" |
+;  AX is preserved             |
 ;------------------------------|
 JrDrawSpr PROC
-          mov DX,0B800h ; offset of PCjr/Tandy video
-          mov ES,DX     ; place in ES
-          xor SI,SI     ; begin with pixel pair 0
+          mov DX,0B800h   ; offset of PCjr/Tandy video
+          mov ES,DX       ; place in ES
           lea SI,grpieces ; source index will begin where the graphics are loaded
           add SI,BX       ; move to requested sprite
           mov DI,AX       ; set destination address to requested video offset
