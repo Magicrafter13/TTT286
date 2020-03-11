@@ -349,13 +349,31 @@ dbJr0:      push BX        ; backup pattern
             call JrDrawSpr ; draw first bar
             sub BX,80h     ; move back to sprite 14
             pop AX         ; restore offset
+
+            ;lea SI,grpieces
+            ;add SI,880h
+            ;mov DI,AX
+            ;add DI,8
+            ;mov CX,8
+;tmpLoop:    lea SI,grpieces
+            ;add SI,880h
+            ;mov DI,AX
+            ;add DI,10h
+            ;cld
+            ;mov CX,8
+            ;rep movsb
+            ;pop BX
+            ;shr BX,1
+            ;jmp dbJrStart
+
             add AX,20h     ; add 32
             call JrDrawSpr ; draw second bar
             add AX,248h    ; beginning of next row
             pop BX         ; restore pattern
             shr BX,1       ; next pattern
             jmp dbJrStart
-dbJr1:      push BX        ; backup pattern
+dbJr1:      ;jmp dbJrStart
+            push BX        ; backup pattern
             push AX        ; backup offset
             mov BX,780h    ; sprite 15, horizontal bar
             call JrDrawSpr ; draw horizontal bar 1
@@ -827,48 +845,60 @@ JrDrawSpr PROC
           mov DX,0B800h ; offset of PCjr/Tandy video
           mov ES,DX     ; place in ES
           xor SI,SI     ; begin with pixel pair 0
-JDSloop:  push AX  ; backup "coords"
-          push BX  ; backup offset
-          ;
-          ; Set Video offset
-          ;
-          mov DX,AX   ; place "coords" in DX
-          mov AX,SI   ; current pixels in AX
-          mov CL,8    ; divide by 8 (one row is 8 bytes)
-          div CL      ; AL now contains which row we're drawing
-          xor BH,BH   ; 0 out BH
-          mov BL,AH   ; place column in BL
-          xor AH,AH   ; remove column
-          mov CL,4    ; divide by 4 (hard to explain, but trust me. this is due to the way video memory is stored in the PCjr/Tandy 1000)
-          div CL      ; AH now contains which bank of video memory we want to change
-          mov AL,AH   ; move it down to AL
-          xor AH,AH   ; remove it from AH
-          mov CL,0A0h ; multiply by 160 (each row of pixels on the screen is 160 bytes, memory is linear so it wraps around)
-          mul CL      ; now the pixel will be placed in the proper row of the screen
-          mov CX,AX   ; place row in CX
-          add CX,BX   ; add column we saved in BL
-          add CX,DX   ; add "coords" to AX
-          ;
-          ; Set Video bank
-          ;
-          mov AX,SI  ; current pixels in AX
-          mov DX,20h ; divide by 32 (I decided to store the graphics, 1 bank at a time, so each 32 bytes is one bank, see PCjr/Tandy 1000 technical reference)
-          div DL     ; now AL is 0, 1, 2, or 3
-          mov DL,AL  ; place bank in DL
-          pop BX     ; restore offset
-          ;
-          ; Get sprite data, and draw
-          ;
-          mov AL,[BX+grpieces] ; get pair of pixels
-          call JrSetPixel      ; set video memory
-          ;
-          ; Continue
-          ;
-          pop AX     ; restore "coords"
-          inc BX     ; next pair
-          inc SI     ; next pair
-          cmp SI,80h ; check if we've drawn the whole bitmap (8x16 bytes)
-          jb JDSloop ; if not, then obviously we must continue
+          lea SI,grpieces ; source index will begin where the graphics are loaded
+          add SI,BX       ; move to requested sprite
+          mov DI,AX       ; set destination address to requested video offset
+          mov CX,8        ; 8 bytes will be copied (8 bytes per row)
+          rep movsb       ; copy 8 bytes from DS to video memory
+          add DI,98h      ; DI + A0 - 8 (add one row to destination, but subtract the 8 bytes we already copied , since DI was changed)
+          mov CX,8        ; set count 8 again
+          rep movsb       ; I think we see where this is going
+          add DI,98h
+          mov CX,8
+          rep movsb
+          add DI,98h
+          mov CX,8
+          rep movsb
+          add DI,1E18h    ; DI - 08 - A0 - A0 - A0 + 2000, -8 is back to start of row, 3 A0s are for 3 previous rows, 2000 is for next video bank
+          mov CX,8
+          rep movsb
+          add DI,98h
+          mov CX,8
+          rep movsb
+          add DI,98h
+          mov CX,8
+          rep movsb
+          add DI,98h
+          mov CX,8
+          rep movsb
+          add DI,1E18h
+          mov CX,8
+          rep movsb
+          add DI,98h
+          mov CX,8
+          rep movsb
+          add DI,98h
+          mov CX,8
+          rep movsb
+          add DI,98h
+          mov CX,8
+          rep movsb
+          add DI,1E18h
+          mov CX,8
+          rep movsb
+          add DI,98h
+          mov CX,8
+          rep movsb
+          add DI,98h
+          mov CX,8
+          rep movsb
+          add DI,98h
+          mov CX,8
+          rep movsb
+          add DI,1E18h
+          mov CX,8
+          rep movsb
+          add BX,80h      ; restore BX
           ret
 JrDrawSpr ENDP
 ;------------------------------|
