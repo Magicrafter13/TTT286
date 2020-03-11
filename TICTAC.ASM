@@ -45,6 +45,7 @@ videos    DB  " 1 - Text only (default)",'$', ; add 19h to get next line
 gameVars  DW  0                               ; lsb is the current player (0 = x, 1 = y), bits 1-15 are board layout (5 bits per row)
 board     DB  "   ³   ³   ÄÄÄÅÄÄÄÅÄÄÄ"        ; building blocks of the game board
 pieces    DB  " XO",0                         ; possible pieces to place on board
+;Numbers   DB "0123456789"                     ; makes printing numbers to the screen easier
           ; PCjr/Tandy graphics data
           ;   sprite    0 = empty (space)                 -   0h
           ;   sprite    1 = X                             -  80h
@@ -64,8 +65,6 @@ video     DB  0,3,9,4                         ; video mode 3 (80x25 text)
 pattern   equ 88h                             ; takes the binary form of 10001000, which, if shifted right,
                                               ; will let me draw board chunk 0,0,0,1,0,0,0,1,0,0,0 while only using 1 byte for the pattern
 vidcount  equ 3                               ; there are currently 2 video options
-
-Numbers   DB "0123456789"
 
 MyData    ENDS
 ;-------------------|
@@ -221,8 +220,6 @@ clsJr:
     mov  AH,0Eh         ; function 0E, output char to screen
     xor  BX,BX          ; set BX to 0
     int  10h            ; call BIOS function 0E
-    lea  DX,CRLF        ; load address of CRLF in DX
-    call WriteLn        ; new line
     jmp userInput       ; procede to user input
   turnJr:
     cmp [pieces+3],0    ; check if someone has won
