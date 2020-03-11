@@ -210,10 +210,10 @@ clsJr:
     je turnJr
     jmp userInput
   turnText:
-    mov AH,2
-    xor BH,BH
-    mov DX,0Bh
-    int 10h
+    mov AH,2            ; BIOS video function 2, set cursor position
+    xor BH,BH           ; page 0
+    mov DX,0Bh          ; row 0, column 11
+    int 10h             ; call BIOS video
     mov  BX,[gameVars]  ; load gameVars in BX
     and  BX,1           ; remove all but LSB
     add  BX,1           ; add 1 (1 = X, 2 = O)
@@ -223,30 +223,18 @@ clsJr:
     int  10h            ; call BIOS function 0E
     lea  DX,CRLF        ; load address of CRLF in DX
     call WriteLn        ; new line
-    jmp userInput
+    jmp userInput       ; procede to user input
   turnJr:
-    cmp [pieces+3],0
-    jnz userInput
-    mov AX,1B80h
-    mov BX,180h
-    call JrDrawSpr
-    add AX,8
-    add BX,80h
-    call JrDrawSpr
-    add AX,8
-    add BX,80h
-    call JrDrawSpr
-    add AX,8
-    add BX,80h
-    call JrDrawSpr
-    add AX,4
-    add BX,80h
-    test gameVars,1
-    jz turnJrCont
-    add BX,80h
+    cmp [pieces+3],0    ; check if someone has won
+    jnz userInput       ; if so, we don't want to draw the "Your Move" sprites on TOP of the "Winner" sprites!
+    mov AX,1B9Ch        ; location where 'fancy' x and o go
+    mov BX,380h         ; location of 'fancy x' sprite
+    test gameVars,1     ; check current player
+    jz turnJrCont       ; if 0, do nothing
+    add BX,80h          ; but if 1, move to 'fancy o' sprite
   turnJrCont:
-    call JrDrawSpr
-    jmp userInput
+    call JrDrawSpr      ; and finally draw it to screen
+    jmp userInput       ; then procede to user input
 
     ; ---------- get user input
   userInput:
@@ -304,23 +292,23 @@ main ENDP
 drawBoardText PROC
               lea DX,moveText    ; Loads the address of the 'words' string, into the DX register
               call WriteLn       ; Ouputs moveText to console, followed by CRLF
-              lea BX,board
-              mov DX,0Bh
-              call WriteTextLn
-              call WriteTextLn
-              call WriteTextLn
-              add BX,DX
-              call WriteTextLn
-              sub BX,DX
-              call WriteTextLn
-              call WriteTextLn
-              call WriteTextLn
-              add BX,DX
-              call WriteTextLn
-              sub BX,DX
-              call WriteTextLn
-              call WriteTextLn
-              call WriteTextLn
+              lea BX,board       ; board pattern 0
+              mov DX,0Bh         ; 11 characters long
+              call WriteTextLn   ; row 0
+              call WriteTextLn   ; row 1
+              call WriteTextLn   ; row 2
+              add BX,DX          ; board pattern 1
+              call WriteTextLn   ; row 3
+              sub BX,DX          ; board pattern 0
+              call WriteTextLn   ; row 4
+              call WriteTextLn   ; row 5
+              call WriteTextLn   ; row 6
+              add BX,DX          ; board pattern 1
+              call WriteTextLn   ; row 7
+              sub BX,DX          ; board pattern 0
+              call WriteTextLn   ; row 8
+              call WriteTextLn   ; row 9
+              call WriteTextLn   ; row 10
               ret
 drawBoardText ENDP
 ;------------------------------------------|
@@ -379,7 +367,18 @@ dbJr1:      push BX        ; backup pattern
             pop BX         ; restore pattern
             shr BX,1       ; next pattern
             jmp dbJrStart
-dbJrEnd:    ret
+dbJrEnd:    mov BX,180h
+            call JrDrawSpr
+            add AX,8
+            add BX,80h
+            call JrDrawSpr
+            add AX,8
+            add BX,80h
+            call JrDrawSpr
+            add AX,8
+            add BX,80h
+            call JrDrawSpr
+            ret
 drawBoardJr ENDP
 ;-------------------------------------------|
 ; Draw Board Procedure, for PCjr/Tandy ENDS |
