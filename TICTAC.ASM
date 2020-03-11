@@ -738,45 +738,6 @@ getColumn ENDP
 ; Get Column Procedure ENDS |
 ;---------------------------|
 
-;--------------------------------------|
-; PCjr/Tandy, Set Pixel Procedure      |
-;   AL = color (0-15)                  |
-;   CX = column (video offset)         |
-;   DX = video bank (0-3)              |
-;   ES must be B800                    |
-;  Preserves BX                        |
-;--------------------------------------|
-JrSetPixel PROC
-	       ;
-	       ; Save registers.
-	       ;
-           push BX ; this is the only register not required by this procedure, so there's a good chance it's being used for something
-           push AX ; save color
-           ;
-	       ; Set Base register to correct bank of memory
-           ;
-           mov AX,2000h
-           mul DX
-           mov BX,AX ; now we have the correct segment for this pixel row
-           pop AX ; restore color
-           ;
-           ; Add "column" offset
-           ;
-           add BX,CX
-	       ;
-	       ; Write the byte to the video buffer.
-	       ;
-           mov ES:[BX],AL
-	       ;
-	       ; Restore registers and return.
-	       ;
-           pop BX
-           ret
-JrSetPixel ENDP
-;--------------------------------------|
-; PCjr/Tandy, Set Pixel Procedure ENDS |
-;--------------------------------------|
-
 ;------------------------------|
 ; PCjr/Tandy, draw sprite      |
 ;   BX = address of sprite     |
