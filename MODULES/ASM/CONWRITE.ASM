@@ -19,7 +19,7 @@ MyData ENDS
 ;------------------|
 MyCode SEGMENT PUBLIC
 
-       PUBLIC Write,WriteLn,WriteText ; Provides external program access to module procedures
+       PUBLIC Write,WriteLn,WriteText,WriteTextLn ; Provides external program access to module procedures
 
        ASSUME CS:MyCode,DS:MyData
 
@@ -78,6 +78,22 @@ WriteTextLoop: push BX           ; save string address
                jnz WriteTextLoop ; continue writing if current char hasn't reached length
                ret
 WriteText      ENDP
+
+;
+; WriteTextLn - calls WriteText, then prints CRLF
+;               see WriteText
+;  Updated:     3/10/2020
+;
+WriteTextLn PROC
+            push BX
+            call WriteText
+            push DX
+            lea DX,CRLF
+            call Write
+            pop DX
+            pop BX
+            ret
+WriteTextLn ENDP
 
 MyCode ENDS
 
