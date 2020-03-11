@@ -128,11 +128,11 @@ GetVideo:
   cmp video,9      ; test Tandy video
   jne NoTandy
   ; PCjr/Tandy Video Gate Array settings
-  mov AH,0       ; Video function 0, set mode
-  mov AL,[video] ; get video mode
-  int 10h        ; call BIOS video
-  mov DX,03D8h   ; Mode Select
-  mov AL,0Bh     ; high-res clock, 320x200 graphics, enable video signal
+  mov AH,0         ; Video function 0, set mode
+  mov AL,[video]   ; get video mode
+  int 10h          ; call BIOS video
+  mov DX,03D8h     ; Mode Select
+  mov AL,0Bh       ; high-res clock, 320x200 graphics, enable video signal
   out DX,AL
   mov DX,03B8h
   mov AL,88h
@@ -185,9 +185,9 @@ ClearScreen:
   mov AL,[video]    ; get video mode
   int 10h           ; call BIOS video
   cmp [video],3     ; check if we're in text mode
-  je clsText
+  je clsText        ; redraw screen (text)
   cmp [video],9     ; check if we're in PCjr/Tandy mode
-  je clsJr
+  je clsJr          ; redraw screen (PCjr/Tandy 1000)
   jmp startGameLoop ; if not, start game as usual
 clsText:
   call drawBoardText
@@ -204,11 +204,11 @@ clsJr:
     int 10h   ; call BIOS video
 
     ; ---------- say whose turn it is
-    cmp [video],3
-    je turnText
-    cmp [video],9
-    je turnJr
-    jmp userInput
+    cmp [video],3       ; test text mode
+    je turnText         ; print current player
+    cmp [video],9       ; test PCjr/Tandy 1000 mode
+    je turnJr           ; draw current player
+    jmp userInput       ; if unknown mode, skip section
   turnText:
     mov AH,2            ; BIOS video function 2, set cursor position
     xor BH,BH           ; page 0
@@ -319,13 +319,13 @@ drawBoardText ENDP
 ; Draw Board Procedure, for PCjr/Tandy      |
 ;-------------------------------------------|
 drawBoardJr PROC
-            mov BX,pattern
-            xor AX,AX
+            mov BX,pattern ; pattern of rows
+            xor AX,AX      ; begin at pixel 0,0
 dbJrStart:  cmp AX,1B80h   ; check if we've drawn all 11 rows
-            jae dbJrEnd
+            jae dbJrEnd    ; if so, draw "Your Move" sprites
             test BX,1      ; check LSB
-            jz dbJr0
-            jnz dbJr1
+            jz dbJr0       ; 0 represents a vertical bar row
+            jnz dbJr1      ; 1 represents a horizontal bar + cross row
 dbJr0:      push BX        ; backup pattern
             add AX,18h     ; add 24
             mov BX,700h    ; sprite 14, vertical bar
@@ -335,7 +335,7 @@ dbJr0:      push BX        ; backup pattern
             add AX,248h    ; beginning of next row
             pop BX         ; restore pattern
             shr BX,1       ; next pattern
-            jmp dbJrStart
+            jmp dbJrStart  ; next iteration
 dbJr1:      push BX        ; backup pattern
             mov BX,780h    ; sprite 15, horizontal bar
             call JrDrawSpr ; draw horizontal bar 1
@@ -366,18 +366,18 @@ dbJr1:      push BX        ; backup pattern
             add AX,230h    ; beginning of next row
             pop BX         ; restore pattern
             shr BX,1       ; next pattern
-            jmp dbJrStart
-dbJrEnd:    mov BX,180h
-            call JrDrawSpr
-            add AX,8
-            add BX,80h
-            call JrDrawSpr
-            add AX,8
-            add BX,80h
-            call JrDrawSpr
-            add AX,8
-            add BX,80h
-            call JrDrawSpr
+            jmp dbJrStart  ; next iteration
+dbJrEnd:    mov BX,180h    ; first sprite of "Your Move"
+            call JrDrawSpr ; draw part 1
+            add AX,8       ; move 8 pixels right
+            add BX,80h     ; next sprite
+            call JrDrawSpr ; draw part 2
+            add AX,8       ; move 8 pixels right
+            add BX,80h     ; next sprite
+            call JrDrawSpr ; draw part 3
+            add AX,8       ; move 8 pixels right
+            add BX,80h     ; next sprite
+            call JrDrawSpr ; draw part 4
             ret
 drawBoardJr ENDP
 ;-------------------------------------------|
@@ -445,21 +445,21 @@ tmRow:     cmp CH,0        ; see if row is 0
            ;
            ; add constructed mask to board data
            ;
-tmDonePos: shl AX,1        ; make room for player
-           add gameVars,AX ; update board and commit to memory
-           pop CX          ; get column and row data for easy win testing
-           cmp [video],3
+tmDonePos: shl AX,1           ; make room for player
+           add gameVars,AX    ; update board and commit to memory
+           pop CX             ; get column and row data for easy win testing
+           cmp [video],3      ; check for text mode
            je tmDPtext
-           cmp [video],9
+           cmp [video],9      ; check for PCjr/Tandy 1000 mode
            je tmDPjr
-           jmp tmDPcont
-tmDPtext:  call drawPieceText
-           jmp tmDPcont
-tmDPjr:    call drawPieceJr
-           jmp tmDPcont
-tmDPcont:  call testWin    ; if we've gotten this far, that means the board has changed, so lets check if the player has won
-           xor gameVars,1  ; XOR LSB, which will change current player
-           xor DL,DL       ; set DL to 0, because we were successful in updating the board
+           jmp tmDPcont       ; unknown mode, so skip section
+tmDPtext:  call drawPieceText ; print added piece to screen
+           jmp tmDPcont       ; continue
+tmDPjr:    call drawPieceJr   ; draw added piece to screen
+           jmp tmDPcont       ; continue
+tmDPcont:  call testWin       ; if we've gotten this far, that means the board has changed, so lets check if the player has won
+           xor gameVars,1     ; XOR LSB, which will change current player
+           xor DL,DL          ; set DL to 0, because we were successful in updating the board
 tmFinish:  ret
 tryMove    ENDP
 ;-------------------------|
@@ -610,7 +610,7 @@ twTest32:   cmp BL,3        ; check if we've reached the end of our loop
             and AX,1Fh      ; and ONLY that row
             push CX         ; backup column,row
             push DX         ; backup column,row direction
-            mov DL,CH
+            mov DL,CH       ; place column in DL
             call getColumn  ; find out what's there
             mov DX,gameVars ; get game data
             and DX,1        ; isolate player
@@ -667,52 +667,61 @@ twWin:      mov AX,gameVars   ; get data
             and AX,1          ; only want LSB
             add AX,1          ; increase by one that way we get X or O, instead of space or X
             mov [pieces+3],AL ; set winner
-            cmp [video],3
-            je twWinText
-            cmp [video],9
-            je twWinJr
-            jmp twEnd
-twWinText:  mov AH,2          ; BIOS video function 2, set cursor position
-            xor BH,BH         ; page 0
-            mov DX,0C00h      ; row 12, column 0
-            int 10h           ; call BIOS video
-            xor AH,AH         ; remove bios video function
-            lea BX,pieces     ; get player characters
-            add BX,AX         ; offset to X or O
-            mov DX,1          ; string length of 1
-            call WriteText    ; print player character to screen
-            lea DX,congrats   ; load win text
-            call WriteLn      ; print to screen
-            jmp twEnd
-twWinJr:    push AX ; backup winner offset
-            mov AX,1B80h
-            mov BX,480h
-            call JrDrawSpr
-            add AX,8
-            add BX,80h
-            call JrDrawSpr
-            add AX,8
-            add BX,80h
-            call JrDrawSpr
-            add AX,8
-            add BX,80h
-            call JrDrawSpr
-            add AX,8
-            add BX,80h
-            call JrDrawSpr
-            add AX,0Ch
-            pop BX ; restore winner offset
-            shl BX,7
-            add BX,300h
-            call JrDrawSpr
-            add AX,0Ch
-            mov BX,880h
-            call JrDrawSpr
-            jmp twEnd
+            cmp [video],3     ; test text mode
+            je twWinText      ; print winning message
+            cmp [video],9     ; text PCjr/Tandy 1000
+            je twWinJr        ; draw winning message
+            jmp twEnd         ; unknown mode, skip section
+            ;
+            ; Congratulatory message, text
+            ;
+twWinText:  mov AH,2        ; BIOS video function 2, set cursor position
+            xor BH,BH       ; page 0
+            mov DX,0C00h    ; row 12, column 0
+            int 10h         ; call BIOS video
+            xor AH,AH       ; remove bios video function
+            lea BX,pieces   ; get player characters
+            add BX,AX       ; offset to X or O
+            mov DX,1        ; string length of 1
+            call WriteText  ; print player character to screen
+            lea DX,congrats ; load win text
+            call WriteLn    ; print to screen
+            jmp twEnd       ; continue
+            ;
+            ; Congratulatory message, PCjr/Tandy 1000
+            ;
+twWinJr:    push AX        ; backup winner offset
+            mov AX,1B80h   ; screen location for "Your Move", and "Winner:" message
+            mov BX,480h    ; sprite 9, beginning of "Winner:" message
+            call JrDrawSpr ; draw sprite 1
+            add AX,8       ; move 8 bytes right
+            add BX,80h     ; next sprite
+            call JrDrawSpr ; draw sprite 2
+            add AX,8       ; move 8 bytes right
+            add BX,80h     ; next sprite
+            call JrDrawSpr ; draw sprite 3
+            add AX,8       ; move 8 bytes right
+            add BX,80h     ; next sprite
+            call JrDrawSpr ; draw sprite 4
+            add AX,8       ; move 8 bytes right
+            add BX,80h     ; next sprite
+            call JrDrawSpr ; draw sprite 5
+            add AX,0Ch     ; move 12 bytes right (1.5 tiles)
+            pop BX         ; restore winner offset
+            shl BX,7       ; multiply by 128
+            add BX,300h    ; then add 300h, now we will be positioned at the 'fancy x', or 'fancy o' sprite
+            call JrDrawSpr ; draw said sprite
+            add AX,0Ch     ; move 12 bytes right
+            mov BX,880h    ; sprite 17, trophy
+            call JrDrawSpr ; draw trophy
+            jmp twEnd      ; continue
+            ;
+            ; End of procedure
+            ;
 twEnd:      ret
 testWin     ENDP
 ;-----------------------------|
-; Test for Win Procedure      |
+; Test for Win Procedure ENDS |
 ;-----------------------------|
 
 ;---------------------------|
@@ -723,14 +732,13 @@ testWin     ENDP
 ; in DL                     |
 ;---------------------------|
 getColumn PROC
-          mov CX,0FF03h    ; set iteration 255 and CL to 3 for division
-gcLoop:   inc CH      ; increment iteration
-          xor AH,AH   ; clear out possible remainder from previous iteration
-          div CL      ; divide board in AX by 3
-          cmp CH,DL   ; compare current column to requested column
-          jnz gcLoop  ; if we haven't reached the column we want, try again
-          mov DL,AH   ; store value of column in DL
-
+          mov CX,0FF03h ; set iteration 255 and CL to 3 for division
+gcLoop:   inc CH        ; increment iteration
+          xor AH,AH     ; clear out possible remainder from previous iteration
+          div CL        ; divide board in AX by 3
+          cmp CH,DL     ; compare current column to requested column
+          jnz gcLoop    ; if we haven't reached the column we want, try again
+          mov DL,AH     ; store value of column in DL
           ret
 getColumn ENDP
 ;---------------------------|
