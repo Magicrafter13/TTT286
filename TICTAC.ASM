@@ -48,34 +48,32 @@ pieces    DB  " XO",0                         ; possible pieces to place on boar
 vidmodes  DB  3,9,4                           ; video mode 3 (80x25 text), 9 is PCjr/Tandy 1000 320x200 16 color, 4 is CGA 320x200 4 color
           ; byte 0 = current video mode
           ; byte 1 = system video mode
-settings  DB  2 DUP 0
+settings  DB  2 DUP (0)
           ; PCjr/Tandy graphics data
-          ;   sprite    0 = empty (space)                 -   0h
-          ;   sprite    1 = X                             -  80h
-          ;   sprite    2 = O                             - 100h
-          ;   sprite  3-6 = 'YOUR MOVE '                  - 180h, 200h, 280h, 300h
-          ;   sprite    7 = fancy x                       - 380h
-          ;   sprite    8 = fancy o                       - 400h
-          ;   sprite 9-13 = "WINNER:"                     - 480h, 500h, 580h, 600h, 680h
-          ;   sprite   14 = vertical bar                  - 700h
-          ;   sprite   15 = horizontal bar                - 780h
-          ;   sprite   16 = horizontal/vertical cross bar - 800h
-          ;   sprite   17 = trophy                        - 880h
+          ;   sprite    0 = X                             -   0h
+          ;   sprite    1 = O                             -  80h
+          ;   sprite  2-5 = 'YOUR MOVE '                  - 100h, 180h, 200h, 280h
+          ;   sprite    6 = fancy x                       - 300h
+          ;   sprite    7 = fancy o                       - 380h
+          ;   sprite 8-12 = "WINNER:"                     - 400h, 480h, 500h, 580h, 600h
+          ;   sprite   13 = vertical bar                  - 680h
+          ;   sprite   14 = horizontal bar                - 700h
+          ;   sprite   15 = horizontal/vertical cross bar - 780h
+          ;   sprite   16 = trophy                        - 800h
 jrdata    DB  "JR.BIN",0,'$'                  ; location of binary data for PCjr/Tandy graphics
           ; CGA graphics data
-          ;   sprite    0 = empty (space)                 -   0h
-          ;   sprite    1 = X                             -  40h
-          ;   sprite    2 = O                             -  80h
-          ;   sprite  3-6 = 'YOUR MOVE '                  -  C0h, 100h, 140h, 180h
-          ;   sprite    7 = fancy x                       - 1C0h
-          ;   sprite    8 = fancy o                       - 200h
-          ;   sprite 9-13 = "WINNER:"                     - 240h, 280h, 2C0h, 300h, 340h
-          ;   sprite   14 = vertical bar                  - 380h
-          ;   sprite   15 = horizontal bar                - 3C0h
-          ;   sprite   16 = horizontal/vertical cross bar - 400h
-          ;   sprite   17 = trophy                        - 440h
+          ;   sprite    0 = X                             -   0h
+          ;   sprite    1 = O                             -  40h
+          ;   sprite  2-5 = 'YOUR MOVE '                  -  80h,  C0h, 100h, 140h
+          ;   sprite    6 = fancy x                       - 180h
+          ;   sprite    7 = fancy o                       - 1C0h
+          ;   sprite 8-12 = "WINNER:"                     - 200h, 240h, 280h, 2C0h, 300h
+          ;   sprite   13 = vertical bar                  - 340h
+          ;   sprite   14 = horizontal bar                - 380h
+          ;   sprite   15 = horizontal/vertical cross bar - 3C0h
+          ;   sprite   16 = trophy                        - 400h
 cgadata   DB  "CGA.BIN",0,'$'                 ; location of binary data for CGA graphics
-grpieces  DB  900h DUP ('#')                  ; reserve 2176 bytes for the PCjr/Tandy graphics
+grpieces  DB  880h DUP ('#')                  ; reserve 2176 bytes for the PCjr/Tandy graphics
 pattern   equ 88h                             ; takes the binary form of 10001000, which, if shifted right,
                                               ; will let me draw board chunk 0,0,0,1,0,0,0,1,0,0,0 while only using 1 byte for the pattern
 vidcount  equ 3                               ; there are currently 2 video options
@@ -181,7 +179,7 @@ JrInit:        mov DX,03D8h ; Mode Select
                jc NoFile       ; if carry flag set, error
                mov BX,AX       ; place file handle in BX
                mov AH,3Fh      ; DOS function 3F, read from file or device
-               mov CX,0900h    ; load 18 sprites of 80h bytes each
+               mov CX,0880h    ; load 17 sprites of 80h bytes each
                lea DX,grpieces ; set address to load data
                int 21h         ; call DOS
                jmp InitGame
@@ -204,7 +202,7 @@ CGAInit:       mov DX,3D8h ; CGA Mode control register
                jc NoFile       ; if carry flag set, error
                mov BX,AX       ; place file handle in BX
                mov AH,3Fh      ; DOS function 3F, read from file or device
-               mov CX,0480h    ; read 18 sprites of 40h bytes each
+               mov CX,0440h    ; read 17 sprites of 40h bytes each
                lea DX,grpieces ; get memory address where graphics are to be stored
                int 21h         ; call DOS (now CGA graphics are in RAM)
                jmp InitGame
@@ -282,7 +280,7 @@ clsCGA:      call drawBoardCGA
                ; Draw player on screen
                ;
   turnJr:      mov AX,1B9Ch    ; location where 'fancy' x and o go
-               mov BX,380h     ; location of 'fancy x' sprite
+               mov BX,300h     ; location of 'fancy x' sprite
                test gameVars,1 ; check current player
                jz turnJrCont   ; if 0, do nothing
                add BX,80h      ; but if 1, move to 'fancy o' sprite
@@ -292,7 +290,7 @@ clsCGA:      call drawBoardCGA
                ; Draw player on screen
                ;
   turnCGA:     mov AX,1B9Ch    ; location where 'fancy' x and o go
-               mov BX,1C0h     ; location of 'fancy x' sprite
+               mov BX,180h     ; location of 'fancy x' sprite
                test gameVars,1 ; check current player
                jz turnCGACont  ; if 0, do nothing
                add BX,40h      ; but if 1, move to 'fancy o' sprite
@@ -301,8 +299,8 @@ clsCGA:      call drawBoardCGA
                ;
                ; Get user input
                ;
-  userInput:   mov AH,7          ; DOS function 07, get single character from keyboard (no echo)
-               int 21h           ; Call DOS
+  userInput:   mov AH,7 ; DOS function 07, get single character from keyboard (no echo)
+               int 21h  ; Call DOS
                ;
                ; Misc functions
                ;
@@ -437,7 +435,7 @@ dbJrStart:  cmp AX,1B80h   ; check if we've drawn all 11 rows
             jnz dbJr1      ; 1 represents a horizontal bar + cross row
 dbJr0:      push BX        ; backup pattern
             add AX,18h     ; add 24
-            mov BX,700h    ; sprite 14, vertical bar
+            mov BX,680h    ; sprite 13, vertical bar
             call JrDrawSpr ; draw first bar
             add AX,20h     ; add 32
             call JrDrawSpr ; draw second bar
@@ -446,16 +444,16 @@ dbJr0:      push BX        ; backup pattern
             shr BX,1       ; next pattern
             jmp dbJrStart  ; next iteration
 dbJr1:      push BX        ; backup pattern
-            mov BX,780h    ; sprite 15, horizontal bar
+            mov BX,700h    ; sprite 14, horizontal bar
             call JrDrawSpr ; draw horizontal bar 1
             add AX,8       ; next grid space
             call JrDrawSpr ; draw horizontal bar 2
             add AX,8       ; next grid space
             call JrDrawSpr ; draw horizontal bar 3
             add AX,8       ; next grid space
-            add BX,80h     ; sprite 16, cross
+            add BX,80h     ; sprite 15, cross
             call JrDrawSpr ; draw cross bar 1
-            sub BX,80h     ; sprite 15, horizontal bar
+            sub BX,80h     ; sprite 14, horizontal bar
             add AX,8       ; next grid space
             call JrDrawSpr ; draw horizontal bar 4
             add AX,8       ; next grid space
@@ -463,9 +461,9 @@ dbJr1:      push BX        ; backup pattern
             add AX,8       ; next grid space
             call JrDrawSpr ; draw horizontal bar 6
             add AX,8       ; next grid space
-            add BX,80h     ; sprite 16, cross
+            add BX,80h     ; sprite 15, cross
             call JrDrawSpr ; draw cross bar 2
-            sub BX,80h     ; sprite 15, horizontal bar
+            sub BX,80h     ; sprite 14, horizontal bar
             add AX,8       ; next grid space
             call JrDrawSpr ; draw horizontal bar 7
             add AX,8       ; next grid space
@@ -476,7 +474,7 @@ dbJr1:      push BX        ; backup pattern
             pop BX         ; restore pattern
             shr BX,1       ; next pattern
             jmp dbJrStart  ; next iteration
-dbJrEnd:    mov BX,180h    ; first sprite of "Your Move"
+dbJrEnd:    mov BX,100h    ; first sprite of "Your Move"
             call JrDrawSpr ; draw part 1
             add AX,8       ; move 8 pixels right
             add BX,80h     ; next sprite
@@ -520,7 +518,7 @@ dbCGAStart:  cmp AX,1B80h    ; check if we've drawn all 11 rows
              jnz dbCGA1      ; 1 represents a horizontal bar + cross row
 dbCGA0:      push BX         ; backup pattern
              add AX,0Ch      ; add 12
-             mov BX,380h     ; sprite 14, vertical bar
+             mov BX,340h     ; sprite 13, vertical bar
              call CGADrawSpr ; draw first bar
              add AX,10h      ; add 16
              call CGADrawSpr ; draw second bar
@@ -529,16 +527,16 @@ dbCGA0:      push BX         ; backup pattern
              shr BX,1        ; next pattern
              jmp dbCGAStart  ; next iteration
 dbCGA1:      push BX         ; backup pattern
-             mov BX,3C0h     ; sprite 15, horizontal bar
+             mov BX,380h     ; sprite 14, horizontal bar
              call CGADrawSpr ; draw horizontal bar 1
              add AX,4        ; next grid space
              call CGADrawSpr ; draw horizontal bar 2
              add AX,4        ; next grid space
              call CGADrawSpr ; draw horizontal bar 3
              add AX,4        ; next grid space
-             add BX,40h      ; sprite 16, cross
+             add BX,40h      ; sprite 15, cross
              call CGADrawSpr ; draw cross bar 1
-             sub BX,40h      ; sprite 15, horizontal bar
+             sub BX,40h      ; sprite 14, horizontal bar
              add AX,4        ; next grid space
              call CGADrawSpr ; draw horizontal bar 4
              add AX,4        ; next grid space
@@ -546,9 +544,9 @@ dbCGA1:      push BX         ; backup pattern
              add AX,4        ; next grid space
              call CGADrawSpr ; draw horizontal bar 6
              add AX,4        ; next grid space
-             add BX,40h      ; sprite 16, cross
+             add BX,40h      ; sprite 15, cross
              call CGADrawSpr ; draw cross bar 2
-             sub BX,40h      ; sprite 15, horizontal bar
+             sub BX,40h      ; sprite 14, horizontal bar
              add AX,4        ; next grid space
              call CGADrawSpr ; draw horizontal bar 7
              add AX,4        ; next grid space
@@ -559,7 +557,7 @@ dbCGA1:      push BX         ; backup pattern
              pop BX          ; restore pattern
              shr BX,1        ; next pattern
              jmp dbCGAStart  ; next iteration
-dbCGAEnd:    mov BX,0C0h     ; first sprite of "Your Move"
+dbCGAEnd:    mov BX,080h     ; first sprite of "Your Move"
              call CGADrawSpr ; draw part 1
              add AX,4        ; move 4 pixels right
              add BX,40h      ; next sprite
@@ -717,7 +715,6 @@ drawPieceJr PROC
             add AX,BX       ; add to video offset (now offset is stored in AX)
             mov BX,gameVars ; get game data in BX
             and BX,1        ; only want player
-            inc BX          ; add 1 for proper offset
             shl BX,7        ; multiply by 80h (80h bytes per sprite)
             call JrDrawSpr  ; draw the new piece to the screen
             pop CX          ; restore row, column
@@ -753,7 +750,6 @@ drawPieceCGA PROC
              add AX,BX       ; add to video offset (now offset is stored in AX)
              mov BX,gameVars ; get game data in BX
              and BX,1        ; only want player
-             inc BX          ; add 1 for proper offset
              shl BX,6        ; multiply by 40h (40h bytes per sprite)
              call CGADrawSpr ; draw the new piece to the screen
              pop CX          ; restore row, column
@@ -927,7 +923,7 @@ twWinText:  mov AH,2        ; BIOS video function 2, set cursor position
             ;
 twWinJr:    push AX        ; backup winner offset
             mov AX,1B80h   ; screen location for "Your Move", and "Winner:" message
-            mov BX,480h    ; sprite 9, beginning of "Winner:" message
+            mov BX,400h    ; sprite 8, beginning of "Winner:" message
             call JrDrawSpr ; draw sprite 1
             add AX,8       ; move 8 bytes right
             add BX,80h     ; next sprite
@@ -944,10 +940,10 @@ twWinJr:    push AX        ; backup winner offset
             add AX,0Ch     ; move 12 bytes right (1.5 tiles)
             pop BX         ; restore winner offset
             shl BX,7       ; multiply by 128
-            add BX,300h    ; then add 300h, now we will be positioned at the 'fancy x', or 'fancy o' sprite
+            add BX,280h    ; then add 280h, now we will be positioned at the 'fancy x', or 'fancy o' sprite
             call JrDrawSpr ; draw said sprite
             add AX,0Ch     ; move 12 bytes right
-            mov BX,880h    ; sprite 17, trophy
+            mov BX,800h    ; sprite 16, trophy
             call JrDrawSpr ; draw trophy
             jmp twEnd      ; continue
             ;
@@ -955,7 +951,7 @@ twWinJr:    push AX        ; backup winner offset
             ;
 twWinCGA:   push AX         ; backup winner offset
             mov AX,1B80h    ; screen location for "Your Move", and "Winner:" message
-            mov BX,240h     ; sprite 9, beginning of "Winner:" message
+            mov BX,200h     ; sprite 8, beginning of "Winner:" message
             call CGADrawSpr ; draw sprite 1
             add AX,4        ; move 4 bytes right
             add BX,40h      ; next sprite
@@ -972,10 +968,10 @@ twWinCGA:   push AX         ; backup winner offset
             add AX,6        ; move 6 bytes right (1.5 tiles)
             pop BX          ; restore winner offset
             shl BX,6        ; multiply by 64 (64 = 40h, which is the size of each sprite)
-            add BX,180h     ; then add 180h, now we will be positioned at the 'fancy x', or 'fancy o' sprite
+            add BX,140h     ; then add 140h, now we will be positioned at the 'fancy x', or 'fancy o' sprite
             call CGADrawSpr ; draw said sprite
             add AX,6        ; move 6 bytes right
-            mov BX,440h     ; sprite 17, trophy
+            mov BX,400h     ; sprite 16, trophy
             call CGADrawSpr ; draw trophy
             jmp twEnd       ; continue
             ;
