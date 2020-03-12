@@ -48,7 +48,7 @@ pieces    DB  " XO",0                         ; possible pieces to place on boar
 vidmodes  DB  3,9,4                           ; video mode 3 (80x25 text), 9 is PCjr/Tandy 1000 320x200 16 color, 4 is CGA 320x200 4 color
           ; byte 0 = current video mode
           ; byte 1 = system video mode
-settings  DB  0,0
+settings  DB  2 DUP 0
           ; PCjr/Tandy graphics data
           ;   sprite    0 = empty (space)                 -   0h
           ;   sprite    1 = X                             -  80h
@@ -97,255 +97,264 @@ MyCode SEGMENT PUBLIC
   EXTRN WriteText:PROC
   EXTRN WriteTextLn:PROC
 
-;------------------------|
-;    Main Procedure      |
-;------------------------|
+;---------------------|
+; Main Procedure      |
+;---------------------|
+main         PROC
+             ;
+             ; Start of Program
+             ;
+start:       mov AX,MyData ; Moves Data segment address to AX register
+             mov DS,AX     ; Allowing us to move that address to the intended data segment register, DS
+             mov AX,0B800h ; most modes use this address for the video memory
+             mov ES,AX
+             ;
+             ; show user possible video modes
+             ;
+             lea DX,videoMode ; get address of video mode string
+             call WriteLn     ; write to screen
+             xor AX,AX        ; count 0
+ShowVideo:   push AX          ; backup count
+             lea DX,videos    ; get video modes
+             mov CL,19h       ; 19h = 25
+             mul CL           ; multiply AX by 25
+             add DX,AX        ; use as offset
+             call WriteLn     ; print
+             pop AX           ; restore count
+             inc AX           ; add 1
+             cmp AX,vidcount  ; test if we're done
+             jne ShowVideo    ; if not, keep going
+             ;
+             ; get video mode that the user wants
+             ;
+AskVideo:    mov AH,7          ; DOS function 1, get char without echo
+             int 21h           ; Call DOS
+             cmp AL,1Bh        ; check if escape was pressed
+             je ExitGame       ; if so, return to DOS
+             sub AL,31h        ; subtract 30h, (turn ascii number into actual number and subtract one)
+             cmp AL,vidcount   ; make sure the user typed a valid number
+             jae AskVideo      ; if not, wait for new input
+             mov [settings],AL ; set video mode
+             ;
+             ; get current video mode, and store in memory
+             ;
+             mov AH,0Fh          ; BIOS video function F, get current video mode
+             int 10h             ; call BIOS video
+             mov [settings+1],AL ; place in memory
+             ;
+             ; set requested video mode
+             ;
+             xor AH,AH            ; Video function 0, set mode
+             mov BL,[settings]    ; get video mode
+             xor BH,BH            ; 0 out BH just in case
+             mov AL,[vidmodes+BX] ; get requested video mode
+             push BX              ; backup video mode
+             int 10h              ; call BIOS video
+             pop AX               ; restore video mode
+             ;
+             ; Initialize and Load graphics (if a graphics mode was selected)
+             ;
+             cmp AL,1         ; test PCjr/Tandy 1000 video
+             je JrInit
+             cmp AL,2         ; test CGA video
+             je CGAInit
+             jmp InitGame
+             ;
+             ; PCjr/Tandy 1000 graphics initialization
+             ;
+               ;
+               ; Video Gate Array Settings
+               ;
+JrInit:        mov DX,03D8h ; Mode Select
+               mov AL,0Bh   ; high-res clock, 320x200 graphics, enable video signal
+               out DX,AL
+               mov DX,03B8h
+               mov AL,88h
+               out DX,AL
+               ;
+               ; Load Graphics from File
+               ;
+               mov AH,3Dh      ; DOS function 3D, open existing file
+               xor AL,AL       ; place 0 in AL
+               lea DX,jrdata   ; get filename
+               int 21h         ; call DOS, if successful, file handle will be stored in AX
+               jc NoFile       ; if carry flag set, error
+               mov BX,AX       ; place file handle in BX
+               mov AH,3Fh      ; DOS function 3F, read from file or device
+               mov CX,0900h    ; load 18 sprites of 80h bytes each
+               lea DX,grpieces ; set address to load data
+               int 21h         ; call DOS
+               jmp InitGame
+             ;
+             ; CGA graphics initialization
+             ;
+CGAInit:       mov DX,3D8h ; CGA Mode control register
+               mov AL,2    ; bit 1 = graphics mode
+               out DX,AL
+               mov DX,3D9h ; CGA Color control register
+               mov AL,20h  ; bit 5 = palette ('snow'), bit 4 = high intensity mode (which I don't want)
+               out DX,AL
+               ;
+               ; Load Graphics from File
+               ;
+               mov AH,3Dh      ; DOS function 3D, open existing file
+               xor AL,AL       ; place 0 in AL
+               lea DX,cgadata  ; get filename
+               int 21h         ; call DOS, if successful, file handle will be stored in AX
+               jc NoFile       ; if carry flag set, error
+               mov BX,AX       ; place file handle in BX
+               mov AH,3Fh      ; DOS function 3F, read from file or device
+               mov CX,0480h    ; read 18 sprites of 40h bytes each
+               lea DX,grpieces ; get memory address where graphics are to be stored
+               int 21h         ; call DOS (now CGA graphics are in RAM)
+               jmp InitGame
+             ;
+             ; Unable to load graphics file
+             ;
+NoFile:      push DX             ; backup filename
+             xor AH,AH           ; BIOS video function 0, set video mode
+             mov AL,[settings+1] ; restore original video mode
+             int 10h             ; call BIOS video
+             pop DX              ; restore filename
+             call Write          ; print filename
+             lea DX,notfound     ; not found message
+             call WriteLn        ; print rest of message
+             jmp ExitGame        ; exit
+             ;
+             ; Initialize game
+             ;
+InitGame:    mov gameVars,0    ; refresh variables
+             cmp [pieces+3],0  ; check winner
+             jz ClearScreen    ; if no winner was set, continue game
+             mov AL,[pieces+3] ; get winner
+             and AX,1          ; remove potential 2nd bit
+             mov gameVars,AX   ; set player
+             mov [pieces+3],0  ; unset winner
+             ;
+             ; Clear screen and redraw interface
+             ;
+ClearScreen: mov AL,[settings] ; get video mode
+             cmp AL,0          ; check if we're in text mode
+             je clsText        ; redraw screen (text)
+             cmp AL,1          ; check if we're in PCjr/Tandy mode
+             je clsJr          ; redraw screen (PCjr/Tandy 1000)
+             cmp AL,2          ; check if we're in CGA mode
+             je clsCGA         ; redraw screen (CGA)
+             jmp startGame     ; if not, start game as usual
+clsText:     call drawBoardText
+             jmp startGame
+clsJr:       call drawBoardJr
+             jmp startGame
+clsCGA:      call drawBoardCGA
+             jmp startGame
+             ;
+             ; Main game loop
+             ;
+  startGame:   mov AL,[settings] ; get video mode
+               ;
+               ; Show whose turn it is
+               ;
+               cmp AL,0         ; test text mode
+               je turnText      ; print current player
+               cmp [pieces+3],0 ; check if someone has won
+               jnz userInput    ; if so, we don't want to draw the "Your Move" sprites on TOP of the "Winner" sprites!
+               cmp AL,1         ; test PCjr/Tandy 1000 mode
+               je turnJr        ; draw current player
+               cmp AL,2         ; test CGA mode
+               je turnCGA       ; draw current player
+               jmp userInput    ; if unknown mode, skip section
+               ;
+               ; Print player character to screen
+               ;
+  turnText:    mov AH,2            ; BIOS video function 2, set cursor position
+               xor BH,BH           ; page 0
+               mov DX,0Bh          ; row 0, column 11
+               int 10h             ; call BIOS video
+               mov  BX,[gameVars]  ; load gameVars in BX
+               and  BX,1           ; remove all but LSB
+               add  BX,1           ; add 1 (1 = X, 2 = O)
+               mov  AL,[pieces+BX] ; get player char
+               mov  AH,0Eh         ; function 0E, output char to screen
+               xor  BX,BX          ; set BX to 0
+               int  10h            ; call BIOS function 0E
+               jmp userInput       ; procede to user input
+               ;
+               ; Draw player on screen
+               ;
+  turnJr:      mov AX,1B9Ch    ; location where 'fancy' x and o go
+               mov BX,380h     ; location of 'fancy x' sprite
+               test gameVars,1 ; check current player
+               jz turnJrCont   ; if 0, do nothing
+               add BX,80h      ; but if 1, move to 'fancy o' sprite
+  turnJrCont:  call JrDrawSpr  ; and finally draw it to screen
+               jmp userInput   ; then procede to user input
+               ;
+               ; Draw player on screen
+               ;
+  turnCGA:     mov AX,1B9Ch    ; location where 'fancy' x and o go
+               mov BX,1C0h     ; location of 'fancy x' sprite
+               test gameVars,1 ; check current player
+               jz turnCGACont  ; if 0, do nothing
+               add BX,40h      ; but if 1, move to 'fancy o' sprite
+  turnCGACont: call CGADrawSpr ; and finally draw it to screen
+               jmp userInput   ; then procede to user input
+               ;
+               ; Get user input
+               ;
+  userInput:   mov AH,7          ; DOS function 07, get single character from keyboard (no echo)
+               int 21h           ; Call DOS
+               ;
+               ; Misc functions
+               ;
+               cmp AL,1Bh   ; compare AL to 1B which corresponds to the escape key
+               je endGame   ; drop out of loop to end game
+               cmp AL,71h   ; compare AL to 71 which corresponds to lowercase 'q'
+               je endGame   ; gotta give people options :)
+               cmp AL,72h   ; compare AL to 72 which corresponds to lowercase 'r'
+               je InitGame  ; restarts game
+               cmp AL,3Fh   ; compare AL to 3F which corresponds to '?'
+               je printHelp ; print help text
+               cmp AL,68h   ; compare AL to 68 which corresponds to lowercase 'h'
+               je printHelp ; print help text
+               ;
+               ; Check for winner (if someone has won, allow no more board changes
+               ;
+               cmp [pieces+3],0 ; see if there is a winner
+               jnz userInput    ; if there is, then we won't allow any further changes to the board
+               ;
+               ; Check if 1-9 were pressed, if so, attempt to update game board
+               ;
+               sub AL,31h      ; ascii for 1 is 31h, so turn that into a 0
+               cmp AL,9        ; now subtract 9, that way if it is 0-8 we will trigger the carry flag
+               jae userInput   ; if they did not input 1-9, then don't try anything (continue)
+               call tryMove    ; attempt the requested move, if it is valid, the board will be updated, and the player will change
+               cmp DL,0        ; check if board was updated
+               jne userInput   ; if not, don't redraw
+               jmp startGame   ; refresh screen
+  printHelp:   lea DX,helpText ; get address of help message
+               call WriteLn    ; print
+               mov AH,7        ; DOS function 07, get single char from keyboard (no echo)
+               int 21h         ; Call DOS again (for user input)
+               jmp ClearScreen ; refresh screen (if they print help repeatedly they might push the gameboard offscreen, we don't want that to happen)
+             ;
+             ; Main game loop end
+             ;
+  endGame:   xor AH,AH           ; BIOS video function 0, set video mode
+             mov AL,[settings+1] ; get original video mode before program execution
+             int 10h             ; call BIOS video
+             lea DX,copyright    ; place address of copyright string in DX
+             call WriteLn        ; print to screen
+             lea DX,thanks       ; place address of thank you message in DX
+             call WriteLn        ; print to screen
+             ;
+             ; Return to DOS
+             ;
+ExitGame:    EXIT 0 ; Calls macro to terminate program and sets ERRORLEVEL to 0
 
-main PROC ; Define Main procedure
-;
-; Start of Program
-;
-start:
-
-  ; ---------- set data location
-  mov AX,MyData ; Moves Data segment address to AX register
-  mov DS,AX     ; Allowing us to move that address to the intended data segment register, DS
-
-  ; ---------- set video mode
-  lea DX,videoMode ; get address of video mode string
-  call WriteLn     ; write to screen
-  xor AX,AX        ; count 0
-GetVideo:
-  push AX          ; backup count
-  lea DX,videos    ; get video modes
-  mov CL,19h       ; 19h = 25
-  mul CL           ; multiply AX by 25
-  add DX,AX        ; use as offset
-  call WriteLn     ; print
-  pop AX           ; restore count
-  inc AX           ; add 1
-  cmp AX,vidcount  ; test if we're done
-  jne GetVideo     ; if not, keep going
-VidInput:
-  mov AH,7            ; DOS function 1, get char without echo
-  int 21h             ; Call DOS
-  cmp AL,1Bh          ; check if escape was pressed
-  je ExitGame         ; if so, return to DOS
-  sub AL,31h          ; subtract 30h, (turn ascii number into actual number and subtract one)
-  cmp AL,vidcount     ; make sure the user typed a valid number
-  jae VidInput        ; if not, wait for new input
-  ;xor AH,AH           ; 0 out upper register
-  ;lea BX,vidmodes     ; get video mode data
-  ;add BX,AX           ; use as offset
-  ;mov AL,[BX]         ; place value in AL
-  mov [settings],AL   ; set video mode
-  mov AH,0Fh          ; BIOS video function F, get current video mode
-  int 10h             ; call BIOS video
-  mov [settings+1],AL ; place in memory
-  ; set requested mode
-  xor AH,AH            ; Video function 0, set mode
-  mov BL,[settings]    ; get video mode
-  xor BH,BH            ; 0 out BH just in case
-  mov AL,[vidmodes+BX] ; get requested video mode
-  push BX              ; backup video mode
-  int 10h              ; call BIOS video
-  pop AX               ; restore video mode
-
-  cmp AL,0          ; test text mode
-  je TextInit
-  ;
-  ; Initialize and Load graphics (if a graphics mode was selected)
-  ;
-  cmp AL,1         ; test PCjr/Tandy 1000 video
-  je JrInit
-  cmp AL,2         ; test CGA video
-  je CGAInit
-  jmp InitGame
-TextInit:
-  mov BX,0B800h    ; mode 2, stores video ram (ascii data) at B0000
-  mov ES,BX        ; place in ES
-  jmp InitGame
-JrInit:
-  mov BX,0B800h    ; PCjr/Tandy 1000 video ram begins at B8000
-  mov ES,BX        ; place in ES
-  ; PCjr/Tandy Video Gate Array settings
-  mov DX,03D8h     ; Mode Select
-  mov AL,0Bh       ; high-res clock, 320x200 graphics, enable video signal
-  out DX,AL
-  mov DX,03B8h
-  mov AL,88h
-  out DX,AL
-  ; PCjr/Tandy 1000 load graphics
-  mov AH,3Dh       ; DOS function 3D, open existing file
-  xor AL,AL        ; place 0 in AL
-  lea DX,jrdata    ; get filename
-  int 21h          ; call DOS, if successful, file handle will be stored in AX
-  jc NoFile        ; if carry flag set, error
-  mov BX,AX        ; place file handle in BX
-  mov AH,3Fh       ; DOS function 3F, read from file or device
-  mov CX,0900h     ; load 2176 bytes
-  lea DX,grpieces  ; set address to load data
-  int 21h          ; call DOS
-  ; PCjr/Tandy 1000 done
-  jmp InitGame
-
-CGAInit:
-  mov BX,0B800h   ; CGA video ram is located at B8000
-  mov ES,BX       ; place in ES
-  mov DX,3D8h     ; CGA Mode control register
-  mov AL,2        ; bit 1 = graphics mode
-  out DX,AL
-  ; CGA load graphics
-  mov AH,3Dh      ; DOS function 3D, open existing file
-  xor AL,AL       ; place 0 in AL
-  lea DX,cgadata  ; get filename
-  int 21h         ; call DOS, if successful, file handle will be stored in AX
-  jc NoFile       ; if carry flag set, error
-  mov BX,AX       ; place file handle in BX
-  mov AH,3Fh      ; DOS function 3F, read from file or device
-  mov CX,0480h    ; read 480h bytes from file
-  lea DX,grpieces ; get memory address where graphics are to be stored
-  int 21h         ; call DOS (now CGA graphics are in RAM)
-  ; CGA done
-  jmp InitGame
-
-NoFile:
-  push DX             ; backup filename
-  xor AH,AH           ; BIOS video function 0, set video mode
-  mov AL,[settings+1] ; restore original video mode
-  int 10h             ; call BIOS video
-  pop DX              ; restore filename
-  call Write          ; print filename
-  lea DX,notfound     ; not found message
-  call WriteLn        ; print rest of message
-  jmp ExitGame        ; exit
-
-InitGame:
-  ; ---------- initialize game
-  mov gameVars,0    ; refresh variables
-  cmp [pieces+3],0  ; check winner
-  jz ClearScreen    ; if no winner was set, continue game
-  mov AL,[pieces+3] ; get winner
-  and AX,1          ; remove potential 2nd bit
-  mov gameVars,AX   ; set player
-  mov [pieces+3],0  ; unset winner
-
-ClearScreen:
-  ; ---------- clear screen and redraw
-  mov AL,[settings] ; get video mode
-  cmp AL,0          ; check if we're in text mode
-  je clsText        ; redraw screen (text)
-  cmp AL,1          ; check if we're in PCjr/Tandy mode
-  je clsJr          ; redraw screen (PCjr/Tandy 1000)
-  cmp AL,2          ; check if we're in CGA mode
-  je clsCGA         ; redraw screen (CGA)
-  jmp startGameLoop ; if not, start game as usual
-clsText:
-  call drawBoardText
-  jmp startGameLoop
-clsJr:
-  call drawBoardJr
-  jmp startGameLoop
-clsCGA:
-  mov DX,3D9h ; CGA Color control register
-  mov AL,20h  ; bit 5 = palette ('snow'), bit 4 = high intensity mode (which I don't want)
-  out DX,AL
-  call drawBoardCGA
-  jmp startGameLoop
-
-  startGameLoop:
-    ; ---------- say whose turn it is
-    mov AL,[settings]   ; get video mode
-    cmp AL,0            ; test text mode
-    je turnText         ; print current player
-    cmp [pieces+3],0    ; check if someone has won
-    jnz userInput       ; if so, we don't want to draw the "Your Move" sprites on TOP of the "Winner" sprites!
-    cmp AL,1            ; test PCjr/Tandy 1000 mode
-    je turnJr           ; draw current player
-    cmp AL,2            ; test CGA mode
-    je turnCGA          ; draw current player
-    jmp userInput       ; if unknown mode, skip section
-  turnText:
-    mov AH,2            ; BIOS video function 2, set cursor position
-    xor BH,BH           ; page 0
-    mov DX,0Bh          ; row 0, column 11
-    int 10h             ; call BIOS video
-    mov  BX,[gameVars]  ; load gameVars in BX
-    and  BX,1           ; remove all but LSB
-    add  BX,1           ; add 1 (1 = X, 2 = O)
-    mov  AL,[pieces+BX] ; get player char
-    mov  AH,0Eh         ; function 0E, output char to screen
-    xor  BX,BX          ; set BX to 0
-    int  10h            ; call BIOS function 0E
-    jmp userInput       ; procede to user input
-  turnJr:
-    mov AX,1B9Ch        ; location where 'fancy' x and o go
-    mov BX,380h         ; location of 'fancy x' sprite
-    test gameVars,1     ; check current player
-    jz turnJrCont       ; if 0, do nothing
-    add BX,80h          ; but if 1, move to 'fancy o' sprite
-  turnJrCont:
-    call JrDrawSpr      ; and finally draw it to screen
-    jmp userInput       ; then procede to user input
-  turnCGA:
-    mov AX,1B9Ch        ; location where 'fancy' x and o go
-    mov BX,1C0h         ; location of 'fancy x' sprite
-    test gameVars,1     ; check current player
-    jz turnCGACont      ; if 0, do nothing
-    add BX,40h          ; but if 1, move to 'fancy o' sprite
-  turnCGACont:
-    call CGADrawSpr     ; and finally draw it to screen
-    jmp userInput       ; then procede to user input
-
-    ; ---------- get user input
-  userInput:
-    mov AH,7          ; DOS function 07, get single character from keyboard (no echo)
-    int 21h           ; Call DOS
-
-    cmp AL,1Bh        ; compare AL to 1B which corresponds to the escape key
-    je endGameLoop    ; drop out of loop to end game
-    cmp AL,71h        ; compare AL to 71 which corresponds to lowercase 'q'
-    je endGameLoop    ; gotta give people options :)
-    cmp AL,72h        ; compare AL to 72 which corresponds to lowercase 'r'
-    je InitGame       ; restarts game
-    cmp AL,3Fh        ; compare AL to 3F which corresponds to '?'
-    je printHelp      ; print help text
-    cmp AL,68h        ; compare AL to 68 which corresponds to lowercase 'h'
-    je printHelp      ; print help text
-
-    cmp [pieces+3],0  ; see if there is a winner
-    jnz userInput     ; if there is, then we won't allow any further changes to the board
-
-    sub AL,31h        ; ascii for 1 is 31h, so turn that into a 0
-    cmp AL,9          ; now subtract 9, that way if it is 0-8 we will trigger the carry flag
-    jae userInput     ; if they did not input 1-9, then don't try anything (continue)
-    call tryMove      ; attempt the requested move, if it is valid, the board will be updated, and the player will change
-    cmp DL,0          ; check if board was updated
-    jne userInput     ; if not, don't redraw
-    jmp startGameLoop ; refresh screen
-  printHelp:
-    lea DX,helpText   ; get address of help message
-    call WriteLn      ; print
-    mov AH,7          ; DOS function 07, get single char from keyboard (no echo)
-    int 21h           ; Call DOS again (for user input)
-    jmp ClearScreen   ; refresh screen (if they print help repeatedly they might push the gameboard offscreen, we don't want that to happen)
-  endGameLoop:
-
-  xor AH,AH           ; BIOS video function 0, set video mode
-  mov AL,[settings+1] ; get original video mode before program execution
-  int 10h             ; call BIOS video
-  lea DX,copyright    ; place address of copyright string in DX
-  call WriteLn        ; print to screen
-  lea DX,thanks       ; place address of thank you message in DX
-  call WriteLn        ; print to screen
-ExitGame:
-  EXIT 0 ; Calls macro to terminate program and sets ERRORLEVEL to 0
-
-main ENDP
-
-;------------------------|
-;    Main Procedure Ends |
-;------------------------|
+main         ENDP
+;---------------------|
+; Main Procedure ENDS |
+;---------------------|
 
 ;------------------------------------------|
 ; Draw Board Procedure, for text mode      |
