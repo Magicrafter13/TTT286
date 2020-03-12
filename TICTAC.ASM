@@ -44,7 +44,7 @@ videos    DB  " 1 - Text only (default)",'$', ; add 19h to get next line
               " 3 - CGA                ",'$'
 gameVars  DW  0                               ; lsb is the current player (0 = x, 1 = y), bits 1-15 are board layout (5 bits per row)
 board     DB  "   ³   ³   ÄÄÄÅÄÄÄÅÄÄÄ"        ; building blocks of the game board
-pieces    DB  " XO",0                         ; possible pieces to place on board
+pieces    DB  "XO",0                          ; possible pieces to place on board
 vidmodes  DB  3,9,4                           ; video mode 3 (80x25 text), 9 is PCjr/Tandy 1000 320x200 16 color, 4 is CGA 320x200 4 color
           ; byte 0 = current video mode
           ; byte 1 = system video mode
@@ -222,12 +222,12 @@ NoFile:      push DX             ; backup filename
              ; Initialize game
              ;
 InitGame:    mov gameVars,0    ; refresh variables
-             cmp [pieces+3],0  ; check winner
+             cmp [pieces+2],0  ; check winner
              jz ClearScreen    ; if no winner was set, continue game
-             mov AL,[pieces+3] ; get winner
+             mov AL,[pieces+2] ; get winner
              and AX,1          ; remove potential 2nd bit
              mov gameVars,AX   ; set player
-             mov [pieces+3],0  ; unset winner
+             mov [pieces+2],0  ; unset winner
              ;
              ; Clear screen and redraw interface
              ;
@@ -254,7 +254,7 @@ clsCGA:      call drawBoardCGA
                ;
                cmp AL,0         ; test text mode
                je turnText      ; print current player
-               cmp [pieces+3],0 ; check if someone has won
+               cmp [pieces+2],0 ; check if someone has won
                jnz userInput    ; if so, we don't want to draw the "Your Move" sprites on TOP of the "Winner" sprites!
                cmp AL,1         ; test PCjr/Tandy 1000 mode
                je turnJr        ; draw current player
@@ -270,7 +270,6 @@ clsCGA:      call drawBoardCGA
                int 10h             ; call BIOS video
                mov  BX,[gameVars]  ; load gameVars in BX
                and  BX,1           ; remove all but LSB
-               add  BX,1           ; add 1 (1 = X, 2 = O)
                mov  AL,[pieces+BX] ; get player char
                mov  AH,0Eh         ; function 0E, output char to screen
                xor  BX,BX          ; set BX to 0
@@ -317,7 +316,7 @@ clsCGA:      call drawBoardCGA
                ;
                ; Check for winner (if someone has won, allow no more board changes
                ;
-               cmp [pieces+3],0 ; see if there is a winner
+               cmp [pieces+2],0 ; see if there is a winner
                jnz userInput    ; if there is, then we won't allow any further changes to the board
                ;
                ; Check if 1-9 were pressed, if so, attempt to update game board
@@ -676,7 +675,7 @@ drawPieceText PROC
               add DH,2           ; increase 2 rows (because "Your Move" text is in row 0)
               mov AH,2           ; BIOS video function 2, set cursor position
               int 10h            ; call BIOS video, also DOS function 2 is write character to output
-              mov BX,1           ; first piece (X)
+              xor BX,BX          ; set player 0
               test gameVars,1    ; check current player
               jz dptEnd          ; if 0, stay with X
               inc BX             ; next piece (O)
@@ -894,7 +893,7 @@ twTest4R:   mov AX,gameVars ; get game data
 twWin:      mov AX,gameVars   ; get data
             and AX,1          ; only want LSB
             add AX,1          ; increase by one that way we get X or O, instead of space or X
-            mov [pieces+3],AL ; set winner
+            mov [pieces+2],AL ; set winner
             mov BH,[settings] ; get video mode
             cmp BH,0          ; test text mode
             je twWinText      ; print winning message
@@ -911,6 +910,7 @@ twWinText:  mov AH,2        ; BIOS video function 2, set cursor position
             mov DX,0C00h    ; row 12, column 0
             int 10h         ; call BIOS video
             xor AH,AH       ; remove bios video function
+            dec AL          ; back to winning player
             lea BX,pieces   ; get player characters
             add BX,AX       ; offset to X or O
             mov DX,1        ; string length of 1
