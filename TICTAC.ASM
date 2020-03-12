@@ -59,6 +59,18 @@ pieces    DB  " XO",0                         ; possible pieces to place on boar
           ;   sprite   16 = horizontal/vertical cross bar - 800h
           ;   sprite   17 = trophy                        - 880h
 jrdata    DB  "JR.BIN",0,'$'                  ; location of binary data for PCjr/Tandy graphics
+          ; CGA graphics data
+          ;   sprite    0 = empty (space)                 -   0h
+          ;   sprite    1 = X                             -  40h
+          ;   sprite    2 = O                             -  80h
+          ;   sprite  3-6 = 'YOUR MOVE '                  -  C0h, 100h, 140h, 180h
+          ;   sprite    7 = fancy x                       - 1C0h
+          ;   sprite    8 = fancy o                       - 200h
+          ;   sprite 9-13 = "WINNER:"                     - 240h, 280h, 2C0h, 300h, 340h
+          ;   sprite   14 = vertical bar                  - 380h
+          ;   sprite   15 = horizontal bar                - 3C0h
+          ;   sprite   16 = horizontal/vertical cross bar - 400h
+          ;   sprite   17 = trophy                        - 440h
 cgadata   DB  "CGA.BIN",0,'$'                 ; location of binary data for CGA graphics
 grpieces  DB  900h DUP ('#')                  ; reserve 2176 bytes for the PCjr/Tandy graphics
 video     DB  0,3,9,4                         ; video mode 3 (80x25 text)
@@ -124,12 +136,13 @@ GetVideo:
   int 10h          ; call BIOS video
   mov [video+1],AL ; place in memory
 
+  xor AH,AH        ; Video function 0, set mode
+  mov AL,[video]   ; get video mode
+  int 10h          ; call BIOS video
+
   cmp video,9      ; test Tandy video
   jne NoTandy
   ; PCjr/Tandy Video Gate Array settings
-  mov AH,0         ; Video function 0, set mode
-  mov AL,[video]   ; get video mode
-  int 10h          ; call BIOS video
   mov DX,03D8h     ; Mode Select
   mov AL,0Bh       ; high-res clock, 320x200 graphics, enable video signal
   out DX,AL
@@ -153,6 +166,28 @@ GetVideo:
 NoTandy:
   cmp video,4      ; test CGA video
   jne NoCGA
+  ; CGA init
+  mov BX,0B800h
+  mov ES,BX
+  mov DX,3D8h ; CGA Mode control register
+  mov AL,2    ; bit 1 = graphics mode
+  out DX,AL
+  mov DX,3D9h ; CGA Color control register
+  mov AL,20h  ; bit 5 = palette ('snow'), bit 4 = high intensity mode (which I don't want)
+  out DX,AL
+
+  mov AH,3Dh
+  xor AL,AL
+  lea DX,cgadata
+  int 21h
+  jc NoFile
+  mov BX,AX
+  mov AH,3Fh
+  mov CX,0480h
+  lea DX,grpieces
+  int 21h
+
+  jmp InitGame
 
 NoCGA:
   jmp InitGame     ; begin game
@@ -183,10 +218,12 @@ ClearScreen:
   xor AH,AH         ; Video function 0, set mode
   mov AL,[video]    ; get video mode
   int 10h           ; call BIOS video
-  cmp [video],3     ; check if we're in text mode
+  cmp AL,3          ; check if we're in text mode
   je clsText        ; redraw screen (text)
-  cmp [video],9     ; check if we're in PCjr/Tandy mode
+  cmp AL,9          ; check if we're in PCjr/Tandy mode
   je clsJr          ; redraw screen (PCjr/Tandy 1000)
+  cmp AL,4          ; check if we're in CGA mode
+  je clsCGA         ; redraw screen (CGA)
   jmp startGameLoop ; if not, start game as usual
 clsText:
   call drawBoardText
@@ -194,19 +231,21 @@ clsText:
 clsJr:
   call drawBoardJr
   jmp startGameLoop
+clsCGA:
+  call drawBoardCGA
+  jmp startGameLoop
 
   startGameLoop:
-    ; ---------- clear screen
-    mov AH,2  ; BIOS video function 2, set cursor position
-    xor BH,BH ; page 0
-    xor DX,DX ; Row 0, Column 0
-    int 10h   ; call BIOS video
-
     ; ---------- say whose turn it is
-    cmp [video],3       ; test text mode
+    mov AL,[video]      ; get video mode
+    cmp AL,3            ; test text mode
     je turnText         ; print current player
-    cmp [video],9       ; test PCjr/Tandy 1000 mode
+    cmp [pieces+3],0    ; check if someone has won
+    jnz userInput       ; if so, we don't want to draw the "Your Move" sprites on TOP of the "Winner" sprites!
+    cmp AL,9            ; test PCjr/Tandy 1000 mode
     je turnJr           ; draw current player
+    cmp AL,4            ; test CGA mode
+    je turnCGA          ; draw current player
     jmp userInput       ; if unknown mode, skip section
   turnText:
     mov AH,2            ; BIOS video function 2, set cursor position
@@ -222,8 +261,6 @@ clsJr:
     int  10h            ; call BIOS function 0E
     jmp userInput       ; procede to user input
   turnJr:
-    cmp [pieces+3],0    ; check if someone has won
-    jnz userInput       ; if so, we don't want to draw the "Your Move" sprites on TOP of the "Winner" sprites!
     mov AX,1B9Ch        ; location where 'fancy' x and o go
     mov BX,380h         ; location of 'fancy x' sprite
     test gameVars,1     ; check current player
@@ -231,6 +268,15 @@ clsJr:
     add BX,80h          ; but if 1, move to 'fancy o' sprite
   turnJrCont:
     call JrDrawSpr      ; and finally draw it to screen
+    jmp userInput       ; then procede to user input
+  turnCGA:
+    mov AX,1B9Ch        ; location where 'fancy' x and o go
+    mov BX,1C0h         ; location of 'fancy x' sprite
+    test gameVars,1     ; check current player
+    jz turnCGACont      ; if 0, do nothing
+    add BX,40h          ; but if 1, move to 'fancy o' sprite
+  turnCGACont:
+    call CGADrawSpr     ; and finally draw it to screen
     jmp userInput       ; then procede to user input
 
     ; ---------- get user input
@@ -287,6 +333,9 @@ main ENDP
 ; Draw Board Procedure, for text mode      |
 ;------------------------------------------|
 drawBoardText PROC
+              mov AH,1           ; BIOS video function 1, cursor control
+              mov CH,1Fh         ; bit 5 disables cursor, 0-4 control cursor shape
+              int 10h            ; call BIOS video
               lea DX,moveText    ; Loads the address of the 'words' string, into the DX register
               call WriteLn       ; Ouputs moveText to console, followed by CRLF
               lea BX,board       ; board pattern 0
@@ -381,6 +430,75 @@ drawBoardJr ENDP
 ; Draw Board Procedure, for PCjr/Tandy ENDS |
 ;-------------------------------------------|
 
+;------------------------------------|
+; Draw Board Procedure, for CGA      |
+;------------------------------------|
+drawBoardCGA PROC
+             mov BX,pattern  ; pattern of rows
+             xor AX,AX       ; begin at pixel 0,0
+dbCGAStart:  cmp AX,1B80h    ; check if we've drawn all 11 rows
+             jae dbCGAEnd    ; if so, draw "Your Move" sprites
+             test BX,1       ; check LSB
+             jz dbCGA0       ; 0 represents a vertical bar row
+             jnz dbCGA1      ; 1 represents a horizontal bar + cross row
+dbCGA0:      push BX         ; backup pattern
+             add AX,0Ch      ; add 12
+             mov BX,380h     ; sprite 14, vertical bar
+             call CGADrawSpr ; draw first bar
+             add AX,10h      ; add 16
+             call CGADrawSpr ; draw second bar
+             add AX,264h     ; beginning of next row
+             pop BX          ; restore pattern
+             shr BX,1        ; next pattern
+             jmp dbCGAStart  ; next iteration
+dbCGA1:      push BX         ; backup pattern
+             mov BX,3C0h     ; sprite 15, horizontal bar
+             call CGADrawSpr ; draw horizontal bar 1
+             add AX,4        ; next grid space
+             call CGADrawSpr ; draw horizontal bar 2
+             add AX,4        ; next grid space
+             call CGADrawSpr ; draw horizontal bar 3
+             add AX,4        ; next grid space
+             add BX,40h      ; sprite 16, cross
+             call CGADrawSpr ; draw cross bar 1
+             sub BX,40h      ; sprite 15, horizontal bar
+             add AX,4        ; next grid space
+             call CGADrawSpr ; draw horizontal bar 4
+             add AX,4        ; next grid space
+             call CGADrawSpr ; draw horizontal bar 5
+             add AX,4        ; next grid space
+             call CGADrawSpr ; draw horizontal bar 6
+             add AX,4        ; next grid space
+             add BX,40h      ; sprite 16, cross
+             call CGADrawSpr ; draw cross bar 2
+             sub BX,40h      ; sprite 15, horizontal bar
+             add AX,4        ; next grid space
+             call CGADrawSpr ; draw horizontal bar 7
+             add AX,4        ; next grid space
+             call CGADrawSpr ; draw horizontal bar 8
+             add AX,4        ; final grid space
+             call CGADrawSpr ; draw horizontal bar 9
+             add AX,258h     ; beginning of next row
+             pop BX          ; restore pattern
+             shr BX,1        ; next pattern
+             jmp dbCGAStart  ; next iteration
+dbCGAEnd:    mov BX,0C0h     ; first sprite of "Your Move"
+             call CGADrawSpr ; draw part 1
+             add AX,4        ; move 4 pixels right
+             add BX,40h      ; next sprite
+             call CGADrawSpr ; draw part 2
+             add AX,4        ; move 4 pixels right
+             add BX,40h      ; next sprite
+             call CGADrawSpr ; draw part 3
+             add AX,4        ; move 4 pixels right
+             add BX,40h      ; next sprite
+             call CGADrawSpr ; draw part 4
+             ret
+drawBoardCGA ENDP
+;------------------------------------|
+; Draw Board Procedure, for CGA ENDS |
+;------------------------------------|
+
 ;-------------------------|
 ; Try Move Procedure      |
 ;                         |
@@ -434,8 +552,7 @@ tmColumn:  cmp CL,0        ; see if column is 0
            add AX,BX       ; multiply AX by 3
            dec CL          ; column -= 1
            jmp tmColumn    ; loop
-tmRow:     cmp CH,0        ; see if row is 0
-           jz tmDonePos    ; we're done
+tmRow:     jcxz tmDonePos  ; if row (CH) is 0, we're done (CL should already be 0 if we've gotten this far)
            shl AX,5        ; move to next row
            dec CH          ; row -= 1
            jmp tmRow       ; loop
@@ -445,14 +562,19 @@ tmRow:     cmp CH,0        ; see if row is 0
 tmDonePos: shl AX,1           ; make room for player
            add gameVars,AX    ; update board and commit to memory
            pop CX             ; get column and row data for easy win testing
-           cmp [video],3      ; check for text mode
+           mov AL,[video]     ; get video mode
+           cmp AL,3           ; check for text mode
            je tmDPtext
-           cmp [video],9      ; check for PCjr/Tandy 1000 mode
+           cmp AL,9           ; check for PCjr/Tandy 1000 mode
            je tmDPjr
+           cmp AL,4           ; check for CGA mode
+           je tmDPcga
            jmp tmDPcont       ; unknown mode, so skip section
 tmDPtext:  call drawPieceText ; print added piece to screen
            jmp tmDPcont       ; continue
 tmDPjr:    call drawPieceJr   ; draw added piece to screen
+           jmp tmDPcont       ; continue
+tmDPcga:   call drawPieceCGA  ; draw added piece to screen
            jmp tmDPcont       ; continue
 tmDPcont:  call testWin       ; if we've gotten this far, that means the board has changed, so lets check if the player has won
            xor gameVars,1     ; XOR LSB, which will change current player
@@ -527,6 +649,42 @@ drawPieceJr ENDP
 ;-------------------------------------------|
 ; Draw Piece Procedure, for PCjr/Tandy ENDS |
 ;-------------------------------------------|
+
+;------------------------------------|
+; Draw Piece Procedure, for CGA      |
+;   CH = row                         |
+;   CL = column                      |
+;   CX is preserved                  |
+;------------------------------------|
+drawPieceCGA PROC
+             push CX         ; backup row, column
+             mov AL,CH       ; place row in AL
+             shl AL,1
+             shl AL,1        ; row * 4
+             inc AL          ; add 1
+             xor AH,AH       ; remove upper byte
+             mov DX,280h     ; 80 * 4 (y-distance between sprites)
+             mul DX          ; multiply
+             mov BX,AX       ; store video offset in BX
+             mov AL,CL       ; place column in AL
+             xor AH,AH       ; 0 out AH
+             shl AX,1
+             shl AX,1        ; column * 4
+             mov DX,4        ; tiles are 4 bytes apart (16 pixels)
+             mul DL          ; column * 4 * 4 = "y coordinate"
+             add AX,DX       ; add one more column
+             add AX,BX       ; add to video offset (now offset is stored in AX)
+             mov BX,gameVars ; get game data in BX
+             and BX,1        ; only want player
+             inc BX          ; add 1 for proper offset
+             shl BX,6        ; multiply by 40h (40h bytes per sprite)
+             call CGADrawSpr ; draw the new piece to the screen
+             pop CX          ; restore row, column
+             ret
+drawPieceCGA ENDP
+;------------------------------------|
+; Draw Piece Procedure, for CGA ENDS |
+;------------------------------------|
 
 ;-----------------------------|
 ; Test for Win Procedure      |
@@ -664,10 +822,13 @@ twWin:      mov AX,gameVars   ; get data
             and AX,1          ; only want LSB
             add AX,1          ; increase by one that way we get X or O, instead of space or X
             mov [pieces+3],AL ; set winner
-            cmp [video],3     ; test text mode
+            mov BH,[video]    ; get video mode
+            cmp BH,3          ; test text mode
             je twWinText      ; print winning message
-            cmp [video],9     ; text PCjr/Tandy 1000
+            cmp BH,9          ; test PCjr/Tandy 1000
             je twWinJr        ; draw winning message
+            cmp BH,4          ; test CGA
+            je twWinCGA       ; draw winning message
             jmp twEnd         ; unknown mode, skip section
             ;
             ; Congratulatory message, text
@@ -712,6 +873,34 @@ twWinJr:    push AX        ; backup winner offset
             mov BX,880h    ; sprite 17, trophy
             call JrDrawSpr ; draw trophy
             jmp twEnd      ; continue
+            ;
+            ; Congratulatory message, CGA
+            ;
+twWinCGA:   push AX         ; backup winner offset
+            mov AX,1B80h    ; screen location for "Your Move", and "Winner:" message
+            mov BX,240h     ; sprite 9, beginning of "Winner:" message
+            call CGADrawSpr ; draw sprite 1
+            add AX,4        ; move 4 bytes right
+            add BX,40h      ; next sprite
+            call CGADrawSpr ; draw sprite 2
+            add AX,4        ; move 4 bytes right
+            add BX,40h      ; next sprite
+            call CGADrawSpr ; draw sprite 3
+            add AX,4        ; move 4 bytes right
+            add BX,40h      ; next sprite
+            call CGADrawSpr ; draw sprite 4
+            add AX,4        ; move 4 bytes right
+            add BX,40h      ; next sprite
+            call CGADrawSpr ; draw sprite 5
+            add AX,6        ; move 6 bytes right (1.5 tiles)
+            pop BX          ; restore winner offset
+            shl BX,6        ; multiply by 64 (64 = 40h, which is the size of each sprite)
+            add BX,180h     ; then add 180h, now we will be positioned at the 'fancy x', or 'fancy o' sprite
+            call CGADrawSpr ; draw said sprite
+            add AX,6        ; move 6 bytes right
+            mov BX,440h     ; sprite 17, trophy
+            call CGADrawSpr ; draw trophy
+            jmp twEnd       ; continue
             ;
             ; End of procedure
             ;
@@ -808,8 +997,70 @@ JrDrawSpr PROC
           ret
 JrDrawSpr ENDP
 ;------------------------------|
-; PCjr/Tandy, draw sprite      |
+; PCjr/Tandy, draw sprite ENDS |
 ;------------------------------|
+
+;--------------------------|
+; CGA, draw sprite         |
+;   BX = address of sprite |
+;   AX = video offset      |
+;--------------------------|
+CGADrawSpr PROC
+           lea SI,grpieces
+           add SI,BX
+           mov DI,AX
+           mov CX,4
+           rep movsb
+           add DI,4Ch
+           mov CX,4
+           rep movsb
+           add DI,4Ch
+           mov CX,4
+           rep movsb
+           add DI,4Ch
+           mov CX,4
+           rep movsb
+           add DI,4Ch
+           mov CX,4
+           rep movsb
+           add DI,4Ch
+           mov CX,4
+           rep movsb
+           add DI,4Ch
+           mov CX,4
+           rep movsb
+           add DI,4Ch
+           mov CX,4
+           rep movsb
+           add DI,1DCCh
+           mov CX,4
+           rep movsb
+           add DI,4Ch
+           mov CX,4
+           rep movsb
+           add DI,4Ch
+           mov CX,4
+           rep movsb
+           add DI,4Ch
+           mov CX,4
+           rep movsb
+           add DI,4Ch
+           mov CX,4
+           rep movsb
+           add DI,4Ch
+           mov CX,4
+           rep movsb
+           add DI,4Ch
+           mov CX,4
+           rep movsb
+           add DI,4Ch
+           mov CX,4
+           rep movsb
+           ret
+CGADrawSpr ENDP
+;--------------------------|
+; CGA, draw sprite ENDS    |
+;--------------------------|
 
 MyCode ENDS
 ;-------------------|
