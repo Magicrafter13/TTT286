@@ -124,10 +124,16 @@ GetVideo:
   inc AX           ; add 1
   cmp AX,vidcount  ; test if we're done
   jne GetVideo     ; if not, keep going
-  mov AH,1         ; DOS function 1, get char with echo
+VidInput:
+  mov AH,7         ; DOS function 1, get char without echo
   int 21h          ; Call DOS
+  cmp AL,1Bh       ; check if escape was pressed
+  je ExitGame      ; if so, return to DOS
+  sub AL,31h       ; subtract 30h, (turn ascii number into actual number and subtract one)
+  cmp AL,vidcount  ; make sure the user typed a valid number
+  jae VidInput     ; if not, wait for new input
+  inc AL           ; add the one we subtracted earlier
   xor AH,AH        ; 0 out upper register
-  sub AL,30h       ; subtract 30h, (turn ascii number into actual number)
   lea BX,video     ; get video mode data
   add BX,AX        ; use as offset
   mov AL,[BX]      ; place value in AL
