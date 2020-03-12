@@ -217,7 +217,9 @@ ClearScreen:
   ; ---------- clear screen
   xor AH,AH         ; Video function 0, set mode
   mov AL,[video]    ; get video mode
+  push AX           ; backup video mode, since interrupt may not preserve AL...
   int 10h           ; call BIOS video
+  pop AX            ; restore video mode
   cmp AL,3          ; check if we're in text mode
   je clsText        ; redraw screen (text)
   cmp AL,9          ; check if we're in PCjr/Tandy mode
