@@ -45,7 +45,10 @@ videos    DB  " 1 - Text only (default)",'$', ; add 19h to get next line
 gameVars  DW  0                               ; lsb is the current player (0 = x, 1 = y), bits 1-15 are board layout (5 bits per row)
 board     DB  "   ³   ³   ÄÄÄÅÄÄÄÅÄÄÄ"        ; building blocks of the game board
 pieces    DB  " XO",0                         ; possible pieces to place on board
-;Numbers   DB "0123456789"                     ; makes printing numbers to the screen easier
+vidmodes  DB  3,9,4                           ; video mode 3 (80x25 text), 9 is PCjr/Tandy 1000 320x200 16 color, 4 is CGA 320x200 4 color
+          ; byte 0 = current video mode
+          ; byte 1 = system video mode
+settings  DB  0,0
           ; PCjr/Tandy graphics data
           ;   sprite    0 = empty (space)                 -   0h
           ;   sprite    1 = X                             -  80h
@@ -73,7 +76,6 @@ jrdata    DB  "JR.BIN",0,'$'                  ; location of binary data for PCjr
           ;   sprite   17 = trophy                        - 440h
 cgadata   DB  "CGA.BIN",0,'$'                 ; location of binary data for CGA graphics
 grpieces  DB  900h DUP ('#')                  ; reserve 2176 bytes for the PCjr/Tandy graphics
-video     DB  0,3,9,4                         ; video mode 3 (80x25 text)
 pattern   equ 88h                             ; takes the binary form of 10001000, which, if shifted right,
                                               ; will let me draw board chunk 0,0,0,1,0,0,0,1,0,0,0 while only using 1 byte for the pattern
 vidcount  equ 3                               ; there are currently 2 video options
@@ -125,37 +127,38 @@ GetVideo:
   cmp AX,vidcount  ; test if we're done
   jne GetVideo     ; if not, keep going
 VidInput:
-  mov AH,7         ; DOS function 1, get char without echo
-  int 21h          ; Call DOS
-  cmp AL,1Bh       ; check if escape was pressed
-  je ExitGame      ; if so, return to DOS
-  sub AL,31h       ; subtract 30h, (turn ascii number into actual number and subtract one)
-  cmp AL,vidcount  ; make sure the user typed a valid number
-  jae VidInput     ; if not, wait for new input
-  inc AL           ; add the one we subtracted earlier
-  xor AH,AH        ; 0 out upper register
-  lea BX,video     ; get video mode data
-  add BX,AX        ; use as offset
-  mov AL,[BX]      ; place value in AL
-  mov video,AL     ; set video mode
-  mov AH,0Fh       ; BIOS video function F, get current video mode
-  int 10h          ; call BIOS video
-  mov [video+1],AL ; place in memory
+  mov AH,7            ; DOS function 1, get char without echo
+  int 21h             ; Call DOS
+  cmp AL,1Bh          ; check if escape was pressed
+  je ExitGame         ; if so, return to DOS
+  sub AL,31h          ; subtract 30h, (turn ascii number into actual number and subtract one)
+  cmp AL,vidcount     ; make sure the user typed a valid number
+  jae VidInput        ; if not, wait for new input
+  ;xor AH,AH           ; 0 out upper register
+  ;lea BX,vidmodes     ; get video mode data
+  ;add BX,AX           ; use as offset
+  ;mov AL,[BX]         ; place value in AL
+  mov [settings],AL   ; set video mode
+  mov AH,0Fh          ; BIOS video function F, get current video mode
+  int 10h             ; call BIOS video
+  mov [settings+1],AL ; place in memory
   ; set requested mode
-  xor AH,AH        ; Video function 0, set mode
-  mov AL,[video]   ; get video mode
-  push AX          ; backup video mode
-  int 10h          ; call BIOS video
-  pop AX           ; restore video mode
+  xor AH,AH            ; Video function 0, set mode
+  mov BL,[settings]    ; get video mode
+  xor BH,BH            ; 0 out BH just in case
+  mov AL,[vidmodes+BX] ; get requested video mode
+  push BX              ; backup video mode
+  int 10h              ; call BIOS video
+  pop AX               ; restore video mode
 
-  cmp AL,3         ; test text mode
+  cmp AL,0          ; test text mode
   je TextInit
   ;
   ; Initialize and Load graphics (if a graphics mode was selected)
   ;
-  cmp AL,9         ; test PCjr/Tandy 1000 video
+  cmp AL,1         ; test PCjr/Tandy 1000 video
   je JrInit
-  cmp AL,4         ; test CGA video
+  cmp AL,2         ; test CGA video
   je CGAInit
   jmp InitGame
 TextInit:
@@ -207,15 +210,15 @@ CGAInit:
   jmp InitGame
 
 NoFile:
-  push DX          ; backup filename
-  xor AH,AH        ; BIOS video function 0, set video mode
-  mov AL,[video+1] ; restore original video mode
-  int 10h          ; call BIOS video
-  pop DX           ; restore filename
-  call Write       ; print filename
-  lea DX,notfound  ; not found message
-  call WriteLn     ; print rest of message
-  jmp ExitGame     ; exit
+  push DX             ; backup filename
+  xor AH,AH           ; BIOS video function 0, set video mode
+  mov AL,[settings+1] ; restore original video mode
+  int 10h             ; call BIOS video
+  pop DX              ; restore filename
+  call Write          ; print filename
+  lea DX,notfound     ; not found message
+  call WriteLn        ; print rest of message
+  jmp ExitGame        ; exit
 
 InitGame:
   ; ---------- initialize game
@@ -229,12 +232,12 @@ InitGame:
 
 ClearScreen:
   ; ---------- clear screen and redraw
-  mov AL,[video]    ; get video mode
-  cmp AL,3          ; check if we're in text mode
+  mov AL,[settings] ; get video mode
+  cmp AL,0          ; check if we're in text mode
   je clsText        ; redraw screen (text)
-  cmp AL,9          ; check if we're in PCjr/Tandy mode
+  cmp AL,1          ; check if we're in PCjr/Tandy mode
   je clsJr          ; redraw screen (PCjr/Tandy 1000)
-  cmp AL,4          ; check if we're in CGA mode
+  cmp AL,2          ; check if we're in CGA mode
   je clsCGA         ; redraw screen (CGA)
   jmp startGameLoop ; if not, start game as usual
 clsText:
@@ -252,14 +255,14 @@ clsCGA:
 
   startGameLoop:
     ; ---------- say whose turn it is
-    mov AL,[video]      ; get video mode
-    cmp AL,3            ; test text mode
+    mov AL,[settings]   ; get video mode
+    cmp AL,0            ; test text mode
     je turnText         ; print current player
     cmp [pieces+3],0    ; check if someone has won
     jnz userInput       ; if so, we don't want to draw the "Your Move" sprites on TOP of the "Winner" sprites!
-    cmp AL,9            ; test PCjr/Tandy 1000 mode
+    cmp AL,1            ; test PCjr/Tandy 1000 mode
     je turnJr           ; draw current player
-    cmp AL,4            ; test CGA mode
+    cmp AL,2            ; test CGA mode
     je turnCGA          ; draw current player
     jmp userInput       ; if unknown mode, skip section
   turnText:
@@ -328,13 +331,13 @@ clsCGA:
     jmp ClearScreen   ; refresh screen (if they print help repeatedly they might push the gameboard offscreen, we don't want that to happen)
   endGameLoop:
 
-  xor AH,AH        ; BIOS video function 0, set video mode
-  mov AL,[video+1] ; get original video mode before program execution
-  int 10h          ; call BIOS video
-  lea DX,copyright ; place address of copyright string in DX
-  call WriteLn     ; print to screen
-  lea DX,thanks    ; place address of thank you message in DX
-  call WriteLn     ; print to screen
+  xor AH,AH           ; BIOS video function 0, set video mode
+  mov AL,[settings+1] ; get original video mode before program execution
+  int 10h             ; call BIOS video
+  lea DX,copyright    ; place address of copyright string in DX
+  call WriteLn        ; print to screen
+  lea DX,thanks       ; place address of thank you message in DX
+  call WriteLn        ; print to screen
 ExitGame:
   EXIT 0 ; Calls macro to terminate program and sets ERRORLEVEL to 0
 
@@ -627,12 +630,12 @@ tmRow:     jcxz tmDonePos  ; if row (CH) is 0, we're done (CL should already be 
 tmDonePos: shl AX,1           ; make room for player
            add gameVars,AX    ; update board and commit to memory
            pop CX             ; get column and row data for easy win testing
-           mov AL,[video]     ; get video mode
-           cmp AL,3           ; check for text mode
+           mov AL,[settings]  ; get video mode
+           cmp AL,0           ; check for text mode
            je tmDPtext
-           cmp AL,9           ; check for PCjr/Tandy 1000 mode
+           cmp AL,1           ; check for PCjr/Tandy 1000 mode
            je tmDPjr
-           cmp AL,4           ; check for CGA mode
+           cmp AL,2           ; check for CGA mode
            je tmDPcga
            jmp tmDPcont       ; unknown mode, so skip section
 tmDPtext:  call drawPieceText ; print added piece to screen
@@ -887,12 +890,12 @@ twWin:      mov AX,gameVars   ; get data
             and AX,1          ; only want LSB
             add AX,1          ; increase by one that way we get X or O, instead of space or X
             mov [pieces+3],AL ; set winner
-            mov BH,[video]    ; get video mode
-            cmp BH,3          ; test text mode
+            mov BH,[settings] ; get video mode
+            cmp BH,0          ; test text mode
             je twWinText      ; print winning message
-            cmp BH,9          ; test PCjr/Tandy 1000
+            cmp BH,1          ; test PCjr/Tandy 1000
             je twWinJr        ; draw winning message
-            cmp BH,4          ; test CGA
+            cmp BH,2          ; test CGA
             je twWinCGA       ; draw winning message
             jmp twEnd         ; unknown mode, skip section
             ;
