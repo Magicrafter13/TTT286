@@ -135,13 +135,30 @@ GetVideo:
   mov AH,0Fh       ; BIOS video function F, get current video mode
   int 10h          ; call BIOS video
   mov [video+1],AL ; place in memory
-
+  ; set requested mode
   xor AH,AH        ; Video function 0, set mode
   mov AL,[video]   ; get video mode
+  push AX          ; backup video mode
   int 10h          ; call BIOS video
+  pop AX           ; restore video mode
 
-  cmp video,9      ; test Tandy video
-  jne NoTandy
+  cmp AL,3         ; test text mode
+  je TextInit
+  ;
+  ; Initialize and Load graphics (if a graphics mode was selected)
+  ;
+  cmp AL,9         ; test PCjr/Tandy 1000 video
+  je JrInit
+  cmp AL,4         ; test CGA video
+  je CGAInit
+  jmp InitGame
+TextInit:
+  mov BX,0B800h    ; mode 2, stores video ram (ascii data) at B0000
+  mov ES,BX        ; place in ES
+  jmp InitGame
+JrInit:
+  mov BX,0B800h    ; PCjr/Tandy 1000 video ram begins at B8000
+  mov ES,BX        ; place in ES
   ; PCjr/Tandy Video Gate Array settings
   mov DX,03D8h     ; Mode Select
   mov AL,0Bh       ; high-res clock, 320x200 graphics, enable video signal
@@ -149,8 +166,7 @@ GetVideo:
   mov DX,03B8h
   mov AL,88h
   out DX,AL
-
-  ; load graphics
+  ; PCjr/Tandy 1000 load graphics
   mov AH,3Dh       ; DOS function 3D, open existing file
   xor AL,AL        ; place 0 in AL
   lea DX,jrdata    ; get filename
@@ -161,33 +177,28 @@ GetVideo:
   mov CX,0900h     ; load 2176 bytes
   lea DX,grpieces  ; set address to load data
   int 21h          ; call DOS
+  ; PCjr/Tandy 1000 done
   jmp InitGame
 
-NoTandy:
-  cmp video,4      ; test CGA video
-  jne NoCGA
-  ; CGA init
-  mov BX,0B800h
-  mov ES,BX
-  mov DX,3D8h ; CGA Mode control register
-  mov AL,2    ; bit 1 = graphics mode
+CGAInit:
+  mov BX,0B800h   ; CGA video ram is located at B8000
+  mov ES,BX       ; place in ES
+  mov DX,3D8h     ; CGA Mode control register
+  mov AL,2        ; bit 1 = graphics mode
   out DX,AL
-
-  mov AH,3Dh
-  xor AL,AL
-  lea DX,cgadata
-  int 21h
-  jc NoFile
-  mov BX,AX
-  mov AH,3Fh
-  mov CX,0480h
-  lea DX,grpieces
-  int 21h
-
+  ; CGA load graphics
+  mov AH,3Dh      ; DOS function 3D, open existing file
+  xor AL,AL       ; place 0 in AL
+  lea DX,cgadata  ; get filename
+  int 21h         ; call DOS, if successful, file handle will be stored in AX
+  jc NoFile       ; if carry flag set, error
+  mov BX,AX       ; place file handle in BX
+  mov AH,3Fh      ; DOS function 3F, read from file or device
+  mov CX,0480h    ; read 480h bytes from file
+  lea DX,grpieces ; get memory address where graphics are to be stored
+  int 21h         ; call DOS (now CGA graphics are in RAM)
+  ; CGA done
   jmp InitGame
-
-NoCGA:
-  jmp InitGame     ; begin game
 
 NoFile:
   push DX          ; backup filename
@@ -211,12 +222,8 @@ InitGame:
   mov [pieces+3],0  ; unset winner
 
 ClearScreen:
-  ; ---------- clear screen
-  xor AH,AH         ; Video function 0, set mode
+  ; ---------- clear screen and redraw
   mov AL,[video]    ; get video mode
-  push AX           ; backup video mode, since interrupt may not preserve AL...
-  int 10h           ; call BIOS video
-  pop AX            ; restore video mode
   cmp AL,3          ; check if we're in text mode
   je clsText        ; redraw screen (text)
   cmp AL,9          ; check if we're in PCjr/Tandy mode
@@ -335,8 +342,24 @@ main ENDP
 ; Draw Board Procedure, for text mode      |
 ;------------------------------------------|
 drawBoardText PROC
+              ;
+              ; Clear Screen
+              ;
+              cld                ; clear direction
+              xor AX,AX          ; set AX to 0
+              mov AX,0700h       ; set color to 07, and clear the character
+              mov DI,0           ; begin at 0
+              mov CX,03E8h       ; whole screen (80x25 / 2)
+              rep stosw          ; fill with 0
+              ;
+              ; Print board
+              ;
               mov AH,1           ; BIOS video function 1, cursor control
               mov CH,1Fh         ; bit 5 disables cursor, 0-4 control cursor shape
+              int 10h            ; call BIOS video
+              mov AH,2           ; BIOS video function 2, set cursor position
+              xor BH,BH          ; page 0
+              xor DX,DX          ; row 0, column 0
               int 10h            ; call BIOS video
               lea DX,moveText    ; Loads the address of the 'words' string, into the DX register
               call WriteLn       ; Ouputs moveText to console, followed by CRLF
@@ -367,6 +390,26 @@ drawBoardText ENDP
 ; Draw Board Procedure, for PCjr/Tandy      |
 ;-------------------------------------------|
 drawBoardJr PROC
+            ;
+            ; clear screen
+            ;
+            cld          ; clear direction
+            xor AX,AX    ; set AX to 0
+            mov DI,0     ; begin at 0
+            mov CX,0F9Fh ; whole screen (bank 0) (1F3F / 2)
+            rep stosw    ; fill with 0
+            add DI,0C1h  ; next bank (2000 - 1F3F)
+            mov CX,0F9Fh ; whole screen (bank 1) (1F3F / 2)
+            rep stosw    ; fill with 0
+            add DI,0C1h  ; next bank
+            mov CX,0F9Fh ; whole screen (bank 2) (1F3F / 2)
+            rep stosw    ; fill with 0
+            add DI,0C1h  ; last bank
+            mov CX,0F9Fh ; whole screen (bank 3) (1F3F / 2)
+            rep stosw    ; fill with 0
+            ;
+            ; draw board
+            ;
             mov BX,pattern ; pattern of rows
             xor AX,AX      ; begin at pixel 0,0
 dbJrStart:  cmp AX,1B80h   ; check if we've drawn all 11 rows
@@ -436,6 +479,20 @@ drawBoardJr ENDP
 ; Draw Board Procedure, for CGA      |
 ;------------------------------------|
 drawBoardCGA PROC
+             ;
+             ; clear screen
+             ;
+             cld          ; clear direction
+             xor AX,AX    ; set AX to 0
+             mov DI,0     ; begin at 0
+             mov CX,0FA0h ; whole screen (bank 0) (1F40 / 2)
+             rep stosw    ; fill with 0
+             add DI,0C0h  ; next bank (2000 - 1F40)
+             mov CX,0FA0h ; whole screen (bank 1) (1F40 / 2)
+             rep stosw    ; fill with 0
+             ;
+             ; Draw board
+             ;
              mov BX,pattern  ; pattern of rows
              xor AX,AX       ; begin at pixel 0,0
 dbCGAStart:  cmp AX,1B80h    ; check if we've drawn all 11 rows
@@ -941,8 +998,6 @@ getColumn ENDP
 ;  BX is preserved             |
 ;------------------------------|
 JrDrawSpr PROC
-          mov DX,0B800h   ; offset of PCjr/Tandy video
-          mov ES,DX       ; place in ES
           lea SI,grpieces ; source index will begin where the graphics are loaded
           add SI,BX       ; move to requested sprite
           mov DI,AX       ; set destination address to requested video offset
