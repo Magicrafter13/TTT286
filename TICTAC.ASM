@@ -172,9 +172,6 @@ NoTandy:
   mov DX,3D8h ; CGA Mode control register
   mov AL,2    ; bit 1 = graphics mode
   out DX,AL
-  mov DX,3D9h ; CGA Color control register
-  mov AL,20h  ; bit 5 = palette ('snow'), bit 4 = high intensity mode (which I don't want)
-  out DX,AL
 
   mov AH,3Dh
   xor AL,AL
@@ -234,6 +231,9 @@ clsJr:
   call drawBoardJr
   jmp startGameLoop
 clsCGA:
+  mov DX,3D9h ; CGA Color control register
+  mov AL,20h  ; bit 5 = palette ('snow'), bit 4 = high intensity mode (which I don't want)
+  out DX,AL
   call drawBoardCGA
   jmp startGameLoop
 
