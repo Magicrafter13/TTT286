@@ -41,11 +41,12 @@ helpText  DB  "Help:",0Dh,0Ah,
 videoMode DB  "Please select video mode:",'$'
 videos    DB  " 1 - Text only (default)",'$', ; add 19h to get next line
               " 2 - Tandy/PC Jr.       ",'$',
-              " 3 - CGA                ",'$'
+              " 3 - CGA                ",'$',
+              " 4 - EGA                ",'$'
 gameVars  DW  0                               ; lsb is the current player (0 = x, 1 = y), bits 1-15 are board layout (5 bits per row)
 board     DB  "   ³   ³   ÄÄÄÅÄÄÄÅÄÄÄ"        ; building blocks of the game board
 pieces    DB  "XO",0                          ; possible pieces to place on board
-vidmodes  DB  3,9,4                           ; video mode 3 (80x25 text), 9 is PCjr/Tandy 1000 320x200 16 color, 4 is CGA 320x200 4 color
+vidmodes  DB  3,9,4,0Dh                       ; video mode 3 (80x25 text), 9 is PCjr/Tandy 1000 320x200 16 color, 4 is CGA 320x200 4 color, D is EGA 320x200 16 color
           ; byte 0 = current video mode
           ; byte 1 = system video mode
 settings  DB  2 DUP (0)
@@ -73,10 +74,11 @@ jrdata    DB  "JR.BIN",0,'$'                  ; location of binary data for PCjr
           ;   sprite   15 = horizontal/vertical cross bar - 3C0h
           ;   sprite   16 = trophy                        - 400h
 cgadata   DB  "CGA.BIN",0,'$'                 ; location of binary data for CGA graphics
+egadata   DB  "EGA.BIN",0,'$'                 ; location of binary data for EGA graphics
 grpieces  DB  880h DUP ('#')                  ; reserve 2176 bytes for the PCjr/Tandy graphics
 pattern   equ 88h                             ; takes the binary form of 10001000, which, if shifted right,
                                               ; will let me draw board chunk 0,0,0,1,0,0,0,1,0,0,0 while only using 1 byte for the pattern
-vidcount  equ 3                               ; there are currently 2 video options
+vidcount  equ 4                               ; there are currently 2 video options
 
 MyData    ENDS
 ;-------------------|
@@ -156,6 +158,8 @@ AskVideo:    mov AH,7          ; DOS function 1, get char without echo
              je JrInit
              cmp AL,2         ; test CGA video
              je CGAInit
+             cmp AL,3         ; test EGA video
+             je EGAInit
              jmp InitGame
              ;
              ; PCjr/Tandy 1000 graphics initialization
@@ -207,6 +211,33 @@ CGAInit:       mov DX,3D8h ; CGA Mode control register
                int 21h         ; call DOS (now CGA graphics are in RAM)
                jmp InitGame
              ;
+             ; EGA graphics initialization
+             ;
+EGAInit:       mov BX,0A000h
+               mov ES,BX
+               ;
+               ; Load Graphics from File
+               ;
+               mov AH,3Dh      ; DOS function 3D, open existing file
+               xor AL,AL       ; place 0 in AL
+               lea DX,egadata  ; get filename
+               int 21h         ; call DOS, if successful, file handle will be stored in AX
+               jc NoFile       ; if carry flag set, error
+               mov BX,AX       ; place file handle in BX
+               mov AH,3Fh      ; DOS function 3F, read from file or device
+               mov CX,0880h    ; load 17 sprites of 80h bytes each
+               lea DX,grpieces ; set address to load data
+               int 21h         ; call DOS
+
+               ;xor BX,BX
+               ;xor AX,AX
+               ;call EGADrawSpr
+
+               ;mov AH,7
+               ;int 21h
+
+               jmp InitGame
+             ;
              ; Unable to load graphics file
              ;
 NoFile:      push DX             ; backup filename
@@ -238,12 +269,16 @@ ClearScreen: mov AL,[settings] ; get video mode
              je clsJr          ; redraw screen (PCjr/Tandy 1000)
              cmp AL,2          ; check if we're in CGA mode
              je clsCGA         ; redraw screen (CGA)
+             cmp AL,3          ; check if we're in EGA mode
+             je clsEGA         ; redraw screen (EGA)
              jmp startGame     ; if not, start game as usual
 clsText:     call drawBoardText
              jmp startGame
 clsJr:       call drawBoardJr
              jmp startGame
 clsCGA:      call drawBoardCGA
+             jmp startGame
+clsEGA:      call drawBoardEGA
              jmp startGame
              ;
              ; Main game loop
@@ -260,6 +295,8 @@ clsCGA:      call drawBoardCGA
                je turnJr        ; draw current player
                cmp AL,2         ; test CGA mode
                je turnCGA       ; draw current player
+               cmp AL,3         ; test EGA mode
+               je turnEGA       ; draw current player
                jmp userInput    ; if unknown mode, skip section
                ;
                ; Print player character to screen
@@ -296,6 +333,16 @@ clsCGA:      call drawBoardCGA
   turnCGACont: call CGADrawSpr ; and finally draw it to screen
                jmp userInput   ; then procede to user input
                ;
+               ; Draw player on screen
+               ;
+  turnEGA:     mov AX,1B87h    ; location where 'fancy' x and o go
+               mov BX,300h     ; location of 'fancy x' sprite
+               test gameVars,1 ; check current player
+               jz turnEGACont  ; if 0, do nothing
+               add BX,80h      ; but if 1, move to 'fancy o' sprite
+  turnEGACont: call EGADrawSpr ; and finally draw it to screen
+               jmp userInput   ; then procede to user input
+               ;
                ; Get user input
                ;
   userInput:   mov AH,7 ; DOS function 07, get single character from keyboard (no echo)
@@ -328,11 +375,58 @@ clsCGA:      call drawBoardCGA
                cmp DL,0        ; check if board was updated
                jne userInput   ; if not, don't redraw
                jmp startGame   ; refresh screen
-  printHelp:   lea DX,helpText ; get address of help message
-               call WriteLn    ; print
+               ;
+               ; Help screen
+               ;
+  printHelp:   mov AL,[settings] ; get current video mode
+               cmp AL,0          ; test text mode
+               je phText
+               cmp AL,1          ; test PCjr/Tandy 1000
+               je phJr
+               cmp AL,2          ; test CGA
+               je phCGA
+               ;
+               ; Print help message
+               ;  Yes, this code is bad, just... consider it temporary I guess
+               ;
+phText:        push DS         ; backup data segment
+               mov BX,ES       ; place video buffer in BX
+               mov DS,BX       ; and then into DS
+               xor SI,SI       ; we'll copy from the current video buffer
+               mov DI,0FA0h    ; to another area in the video buffer that isn't displayed
+               cld             ; go forward
+               mov CX,410h     ; copy 13 screen rows of text
+               rep movsw
+               xor DI,DI       ; start at 0
+               mov CX,410h     ; copy into 13 screen rows of text
+               mov AX,0700h    ; retain default color setting, but remove any characters
+               rep stosw
+               pop DS          ; restore data segment (for Write)
+               mov AH,2        ; BIOS video function 2, set cursor position
+               xor BH,BH       ; page 0
+               xor DX,DX       ; row 0, column 0
+               int 10h         ; call BIOS video
+               lea DX,helpText ; get address of help message
+               call Write      ; print
                mov AH,7        ; DOS function 07, get single char from keyboard (no echo)
                int 21h         ; Call DOS again (for user input)
-               jmp ClearScreen ; refresh screen (if they print help repeatedly they might push the gameboard offscreen, we don't want that to happen)
+               push DS         ; backup data segment
+               mov BX,ES       ; place video buffer in BX
+               mov DS,BX       ; and then into DS
+               mov SI,0FA0h    ; this time we'll start in the hidden area
+               xor DI,DI       ; and copy to the visible area
+               mov CX,410h     ; copy 13 screen rows of text
+               rep movsw
+               pop DS          ; restore data segment for the rest of the program
+               jmp userInput   ; return to input
+               ;
+               ; Draw help message
+               ;
+  phJr:        jmp userInput
+               ;
+               ; Draw help message
+               ;
+  phCGA:       jmp userInput
              ;
              ; Main game loop end
              ;
@@ -573,6 +667,89 @@ drawBoardCGA ENDP
 ; Draw Board Procedure, for CGA ENDS |
 ;------------------------------------|
 
+;------------------------------------|
+; Draw Board Procedure, for EGA      |
+;------------------------------------|
+drawBoardEGA PROC
+             ;
+             ; clear screen
+             ;
+             cld          ; clear direction
+             xor AX,AX    ; set AX to 0
+             mov DI,0     ; begin at 0
+             mov CX,1F40h ; whole screen (1F40 / 2)
+             rep stosw    ; fill with 0
+             mov DX,03C4h ; Sequencer Registers - EGA
+             mov AX,0F02h ; All bitplanes
+             out DX,AX    ; update screen
+             ;
+             ; draw board
+             ;
+             mov BX,pattern  ; pattern of rows
+             xor AX,AX       ; begin at pixel 0,0
+dbEGAStart:  cmp AX,1B80h    ; check if we've drawn all 11 rows
+             jae dbEGAEnd    ; if so, draw "Your Move" sprites
+             test BX,1       ; check LSB
+             jz dbEGA0       ; 0 represents a vertical bar row
+             jnz dbEGA1      ; 1 represents a horizontal bar + cross row
+dbEGA0:      push BX         ; backup pattern
+             add AX,6        ; add 6
+             mov BX,680h     ; sprite 13, vertical bar
+             call EGADrawSpr ; draw first bar
+             add AX,8        ; add 32
+             call EGADrawSpr ; draw second bar
+             add AX,272h     ; beginning of next row
+             pop BX          ; restore pattern
+             shr BX,1        ; next pattern
+             jmp dbEGAStart  ; next iteration
+dbEGA1:      push BX         ; backup pattern
+             mov BX,700h     ; sprite 14, horizontal bar
+             call EGADrawSpr ; draw horizontal bar 1
+             add AX,2        ; next grid space
+             call EGADrawSpr ; draw horizontal bar 2
+             add AX,2        ; next grid space
+             call EGADrawSpr ; draw horizontal bar 3
+             add AX,2        ; next grid space
+             add BX,80h      ; sprite 15, cross
+             call EGADrawSpr ; draw cross bar 1
+             sub BX,80h      ; sprite 14, horizontal bar
+             add AX,2        ; next grid space
+             call EGADrawSpr ; draw horizontal bar 4
+             add AX,2        ; next grid space
+             call EGADrawSpr ; draw horizontal bar 5
+             add AX,2        ; next grid space
+             call EGADrawSpr ; draw horizontal bar 6
+             add AX,2        ; next grid space
+             add BX,80h      ; sprite 15, cross
+             call EGADrawSpr ; draw cross bar 2
+             sub BX,80h      ; sprite 14, horizontal bar
+             add AX,2        ; next grid space
+             call EGADrawSpr ; draw horizontal bar 7
+             add AX,2        ; next grid space
+             call EGADrawSpr ; draw horizontal bar 8
+             add AX,2        ; final grid space
+             call EGADrawSpr ; draw horizontal bar 9
+             add AX,26Ch      ; beginning of next row (3C + 4B0)
+             pop BX          ; restore pattern
+             shr BX,1        ; next pattern
+             jmp dbEGAStart  ; next iteration
+dbEGAEnd:    mov BX,100h     ; first sprite of "Your Move"
+             call EGADrawSpr ; draw part 1
+             add AX,2        ; move 16 pixels right
+             add BX,80h      ; next sprite
+             call EGADrawSpr ; draw part 2
+             add AX,2        ; move 16 pixels right
+             add BX,80h      ; next sprite
+             call EGADrawSpr ; draw part 3
+             add AX,2        ; move 16 pixels right
+             add BX,80h      ; next sprite
+             call EGADrawSpr ; draw part 4
+             ret
+drawBoardEGA ENDP
+;------------------------------------|
+; Draw Board Procedure, for EGA ENDS |
+;------------------------------------|
+
 ;-------------------------|
 ; Try Move Procedure      |
 ;                         |
@@ -643,12 +820,16 @@ tmDonePos: shl AX,1           ; make room for player
            je tmDPjr
            cmp AL,2           ; check for CGA mode
            je tmDPcga
+           cmp AL,3           ; check for EGA mode
+           je tmDPega
            jmp tmDPcont       ; unknown mode, so skip section
 tmDPtext:  call drawPieceText ; print added piece to screen
            jmp tmDPcont       ; continue
 tmDPjr:    call drawPieceJr   ; draw added piece to screen
            jmp tmDPcont       ; continue
 tmDPcga:   call drawPieceCGA  ; draw added piece to screen
+           jmp tmDPcont       ; continue
+tmDPega:   call drawPieceEGA  ; draw added piece to screen
            jmp tmDPcont       ; continue
 tmDPcont:  call testWin       ; if we've gotten this far, that means the board has changed, so lets check if the player has won
            xor gameVars,1     ; XOR LSB, which will change current player
@@ -756,6 +937,44 @@ drawPieceCGA PROC
 drawPieceCGA ENDP
 ;------------------------------------|
 ; Draw Piece Procedure, for CGA ENDS |
+;------------------------------------|
+
+;------------------------------------|
+; Draw Piece Procedure, for EGA      |
+;   CH = row                         |
+;   CL = column                      |
+;   CX is preserved                  |
+;------------------------------------|
+drawPieceEGA PROC
+             push CX         ; backup row, column
+             mov AL,CH       ; place row in AL
+             shl AL,1
+             shl AL,1        ; row * 4
+             inc AL          ; add 1
+             xor AH,AH       ; remove upper byte
+             mov DX,280h     ; 160 * 4 (y-distance between sprites)
+             mul DX          ; multiply
+             mov BX,AX       ; store video offset in BX
+             mov AL,CL       ; place column in AL
+             xor AH,AH       ; 0 out AH
+             shl AX,1
+             shl AX,1        ; column * 4
+             mov DX,2        ; tiles are 2 bytes apart (16 pixels)
+             ;
+             ; I should change this to shl instructions
+             ;
+             mul DL          ; column * 4 * 2 = "y coordinate"
+             add AX,DX       ; add one more column
+             add AX,BX       ; add to video offset (now offset is stored in AX)
+             mov BX,gameVars ; get game data in BX
+             and BX,1        ; only want player
+             shl BX,7        ; multiply by 80h (80h bytes per sprite)
+             call EGADrawSpr ; draw the new piece to the screen
+             pop CX          ; restore row, column
+             ret
+drawPieceEGA ENDP
+;------------------------------------|
+; Draw Piece Procedure, for EGA ENDS |
 ;------------------------------------|
 
 ;-----------------------------|
@@ -901,6 +1120,8 @@ twWin:      mov AX,gameVars   ; get data
             je twWinJr        ; draw winning message
             cmp BH,2          ; test CGA
             je twWinCGA       ; draw winning message
+            cmp BH,3          ; test EGA
+            je twWinEGA       ; draw winning message
             jmp twEnd         ; unknown mode, skip section
             ;
             ; Congratulatory message, text
@@ -974,6 +1195,34 @@ twWinCGA:   push AX         ; backup winner offset
             mov BX,400h     ; sprite 16, trophy
             call CGADrawSpr ; draw trophy
             jmp twEnd       ; continue
+            ;
+            ; Congratulatory message, EGA
+            ;
+twWinEGA:   push AX        ; backup winner offset
+            mov AX,1B80h   ; screen location for "Your Move", and "Winner:" message
+            mov BX,400h    ; sprite 8, beginning of "Winner:" message
+            call EGADrawSpr ; draw sprite 1
+            add AX,2       ; move 2 bytes right
+            add BX,80h     ; next sprite
+            call EGADrawSpr ; draw sprite 2
+            add AX,2       ; move 2 bytes right
+            add BX,80h     ; next sprite
+            call EGADrawSpr ; draw sprite 3
+            add AX,2       ; move 2 bytes right
+            add BX,80h     ; next sprite
+            call EGADrawSpr ; draw sprite 4
+            add AX,2       ; move 2 bytes right
+            add BX,80h     ; next sprite
+            call EGADrawSpr ; draw sprite 5
+            add AX,3     ; move 3 bytes right (1.5 tiles)
+            pop BX         ; restore winner offset
+            shl BX,7       ; multiply by 128
+            add BX,280h    ; then add 280h, now we will be positioned at the 'fancy x', or 'fancy o' sprite
+            call EGADrawSpr ; draw said sprite
+            add AX,3     ; move 3 bytes right
+            mov BX,800h    ; sprite 16, trophy
+            call EGADrawSpr ; draw trophy
+            jmp twEnd      ; continue
             ;
             ; End of procedure
             ;
@@ -1132,6 +1381,112 @@ CGADrawSpr ENDP
 ;--------------------------|
 ; CGA, draw sprite ENDS    |
 ;--------------------------|
+
+;------------------------------|
+; EGA, draw sprite             |
+;   BX = address of sprite     |
+;   AX = video offset/"coords" |
+;  AX is preserved             |
+;  BX is preserved             |
+;------------------------------|
+EGADrawSpr PROC
+           lea SI,grpieces
+           add SI,BX
+           mov DX,03C4h ; Sequencer Registers - EGA
+           mov CL,8     ; begin with intensity bitplane
+           cld          ; go forward
+EGAdsLoop: mov DI,AX    ; set destination to video address
+           movsw        ; write 2 bytes (16 pixels) to bitplane
+           add DI,26h   ; each row (320 px) is 28h bytes, and we just moved forward 2
+           movsw        ; etc
+           add DI,26h
+           movsw
+           add DI,26h
+           movsw
+           add DI,26h
+           movsw
+           add DI,26h
+           movsw
+           add DI,26h
+           movsw
+           add DI,26h
+           movsw
+           add DI,26h
+           movsw
+           add DI,26h
+           movsw
+           add DI,26h
+           movsw
+           add DI,26h
+           movsw
+           add DI,26h
+           movsw
+           add DI,26h
+           movsw
+           add DI,26h
+           movsw
+           add DI,26h
+           movsw
+           push AX      ; backup AX, since apparently I can't use the C registers with OUT or IN...
+           mov AH,CL    ; place CL in AH
+           shr AH,1     ; and move to the right (now it should be 4 2 1 or 0
+           mov AL,2     ; Map Mask register
+           out DX,AX    ; update screen
+           pop AX       ; restore video address
+           shr CL,1     ; keep going if we haven't set all 4 bitplanes
+           jnz EGAdsLoop
+           push AX
+           mov AX,0F02h
+           out DX,AX
+           pop AX
+           ret
+
+           lea SI,grpieces ; source index will begin where the graphics are loaded
+           add SI,BX       ; move to requested sprite
+           mov DI,AX       ; set destination address to requested video offset
+           mov DL,0
+EGAplane:  movsb
+           add DI,26h      ; DI + A0 - 8 (add one row to destination, but subtract the 8 bytes we already copied , since DI was changed)
+           movsb       ; I think we see where this is going
+           add DI,26h
+           movsb
+           add DI,26h
+           movsb
+           add DI,26h
+           movsb
+           add DI,26h
+           movsb
+           add DI,26h
+           movsb
+           add DI,26h
+           movsb
+           add DI,26h
+           movsb
+           add DI,26h
+           movsb
+           add DI,26h
+           movsb
+           add DI,26h
+           movsb
+           add DI,26h
+           movsb
+           add DI,26h
+           movsb
+           add DI,26h
+           movsb
+           add DI,26h
+           movsb
+           ;add DI,1DACh
+           mov DI,CX
+           shl DI,0Dh
+           inc CL
+           cmp CL,4
+           jnz EGAplane
+           ret
+EGADrawSpr ENDP
+;------------------------------|
+; EGA, draw sprite ENDS        |
+;------------------------------|
 
 MyCode ENDS
 ;-------------------|
