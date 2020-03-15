@@ -74,6 +74,8 @@ jrdata    DB  "JR.BIN",0,'$'                  ; location of binary data for PCjr
           ;   sprite   15 = horizontal/vertical cross bar - 3C0h
           ;   sprite   16 = trophy                        - 400h
 cgadata   DB  "CGA.BIN",0,'$'                 ; location of binary data for CGA graphics
+          ; EGA graphics data
+          ; sprite offsets identical to PCjr/Tandy 1000 graphics data
 egadata   DB  "EGA.BIN",0,'$'                 ; location of binary data for EGA graphics
 grpieces  DB  880h DUP ('#')                  ; reserve 2176 bytes for the PCjr/Tandy graphics
 pattern   equ 88h                             ; takes the binary form of 10001000, which, if shifted right,
@@ -228,14 +230,6 @@ EGAInit:       mov BX,0A000h
                mov CX,0880h    ; load 17 sprites of 80h bytes each
                lea DX,grpieces ; set address to load data
                int 21h         ; call DOS
-
-               ;xor BX,BX
-               ;xor AX,AX
-               ;call EGADrawSpr
-
-               ;mov AH,7
-               ;int 21h
-
                jmp InitGame
              ;
              ; Unable to load graphics file
@@ -385,6 +379,7 @@ clsEGA:      call drawBoardEGA
                je phJr
                cmp AL,2          ; test CGA
                je phCGA
+               cmp AL,3          ; test EGA
                ;
                ; Print help message
                ;  Yes, this code is bad, just... consider it temporary I guess
@@ -427,6 +422,10 @@ phText:        push DS         ; backup data segment
                ; Draw help message
                ;
   phCGA:       jmp userInput
+               ;
+               ; Draw help message
+               ;
+  phEGA:       jmp userInput
              ;
              ; Main game loop end
              ;
@@ -729,7 +728,7 @@ dbEGA1:      push BX         ; backup pattern
              call EGADrawSpr ; draw horizontal bar 8
              add AX,2        ; final grid space
              call EGADrawSpr ; draw horizontal bar 9
-             add AX,26Ch      ; beginning of next row (3C + 4B0)
+             add AX,26Ch     ; beginning of next row (3C + 4B0)
              pop BX          ; restore pattern
              shr BX,1        ; next pattern
              jmp dbEGAStart  ; next iteration
@@ -923,10 +922,10 @@ drawPieceCGA PROC
              mov AL,CL       ; place column in AL
              xor AH,AH       ; 0 out AH
              shl AX,1
-             shl AX,1        ; column * 4
-             mov DX,4        ; tiles are 4 bytes apart (16 pixels)
-             mul DL          ; column * 4 * 4 = "y coordinate"
-             add AX,DX       ; add one more column
+             shl AX,1
+             shl AX,1
+             shl AX,1        ; column * 4 * 4 = "y coordinate"
+             add AX,4        ; add one more column
              add AX,BX       ; add to video offset (now offset is stored in AX)
              mov BX,gameVars ; get game data in BX
              and BX,1        ; only want player
@@ -958,13 +957,9 @@ drawPieceEGA PROC
              mov AL,CL       ; place column in AL
              xor AH,AH       ; 0 out AH
              shl AX,1
-             shl AX,1        ; column * 4
-             mov DX,2        ; tiles are 2 bytes apart (16 pixels)
-             ;
-             ; I should change this to shl instructions
-             ;
-             mul DL          ; column * 4 * 2 = "y coordinate"
-             add AX,DX       ; add one more column
+             shl AX,1
+             shl AX,1        ; column * 4 * 2 = "y coordinate"
+             add AX,2        ; add one more column
              add AX,BX       ; add to video offset (now offset is stored in AX)
              mov BX,gameVars ; get game data in BX
              and BX,1        ; only want player
@@ -1198,31 +1193,31 @@ twWinCGA:   push AX         ; backup winner offset
             ;
             ; Congratulatory message, EGA
             ;
-twWinEGA:   push AX        ; backup winner offset
-            mov AX,1B80h   ; screen location for "Your Move", and "Winner:" message
-            mov BX,400h    ; sprite 8, beginning of "Winner:" message
+twWinEGA:   push AX         ; backup winner offset
+            mov AX,1B80h    ; screen location for "Your Move", and "Winner:" message
+            mov BX,400h     ; sprite 8, beginning of "Winner:" message
             call EGADrawSpr ; draw sprite 1
-            add AX,2       ; move 2 bytes right
-            add BX,80h     ; next sprite
+            add AX,2        ; move 2 bytes right
+            add BX,80h      ; next sprite
             call EGADrawSpr ; draw sprite 2
-            add AX,2       ; move 2 bytes right
-            add BX,80h     ; next sprite
+            add AX,2        ; move 2 bytes right
+            add BX,80h      ; next sprite
             call EGADrawSpr ; draw sprite 3
-            add AX,2       ; move 2 bytes right
-            add BX,80h     ; next sprite
+            add AX,2        ; move 2 bytes right
+            add BX,80h      ; next sprite
             call EGADrawSpr ; draw sprite 4
-            add AX,2       ; move 2 bytes right
-            add BX,80h     ; next sprite
+            add AX,2        ; move 2 bytes right
+            add BX,80h      ; next sprite
             call EGADrawSpr ; draw sprite 5
-            add AX,3     ; move 3 bytes right (1.5 tiles)
-            pop BX         ; restore winner offset
-            shl BX,7       ; multiply by 128
-            add BX,280h    ; then add 280h, now we will be positioned at the 'fancy x', or 'fancy o' sprite
+            add AX,3        ; move 3 bytes right (1.5 tiles)
+            pop BX          ; restore winner offset
+            shl BX,7        ; multiply by 128
+            add BX,280h     ; then add 280h, now we will be positioned at the 'fancy x', or 'fancy o' sprite
             call EGADrawSpr ; draw said sprite
-            add AX,3     ; move 3 bytes right
-            mov BX,800h    ; sprite 16, trophy
+            add AX,3        ; move 3 bytes right
+            mov BX,800h     ; sprite 16, trophy
             call EGADrawSpr ; draw trophy
-            jmp twEnd      ; continue
+            jmp twEnd       ; continue
             ;
             ; End of procedure
             ;
@@ -1439,49 +1434,6 @@ EGAdsLoop: mov DI,AX    ; set destination to video address
            mov AX,0F02h
            out DX,AX
            pop AX
-           ret
-
-           lea SI,grpieces ; source index will begin where the graphics are loaded
-           add SI,BX       ; move to requested sprite
-           mov DI,AX       ; set destination address to requested video offset
-           mov DL,0
-EGAplane:  movsb
-           add DI,26h      ; DI + A0 - 8 (add one row to destination, but subtract the 8 bytes we already copied , since DI was changed)
-           movsb       ; I think we see where this is going
-           add DI,26h
-           movsb
-           add DI,26h
-           movsb
-           add DI,26h
-           movsb
-           add DI,26h
-           movsb
-           add DI,26h
-           movsb
-           add DI,26h
-           movsb
-           add DI,26h
-           movsb
-           add DI,26h
-           movsb
-           add DI,26h
-           movsb
-           add DI,26h
-           movsb
-           add DI,26h
-           movsb
-           add DI,26h
-           movsb
-           add DI,26h
-           movsb
-           add DI,26h
-           movsb
-           ;add DI,1DACh
-           mov DI,CX
-           shl DI,0Dh
-           inc CL
-           cmp CL,4
-           jnz EGAplane
            ret
 EGADrawSpr ENDP
 ;------------------------------|
