@@ -10,6 +10,7 @@ This program should assemble and run perfectly fine in DOSBox.
 1. Text Mode - Uses a mode 3, 80x25 text. (though it doesn't use that entire space)
 2. PCjr/Tandy 1000 - 320x200, 16 color mode (requires JR.BIN)
 3. CGA - 320x200 4 color mode (requires CGA.BIN)
+4. EGA - 320x200 16 color mode (requires EGA.BIN)
 
 ## Why?
 1. Why did I make the program: Well, I want to try and start making games/software for DOS, and this is a simple way to get some practice.
