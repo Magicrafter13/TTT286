@@ -430,75 +430,120 @@ clsEGA:      call drawBoardEGA
                ;
                ; Draw cursor and update memory
                ;
-  updateCur:   push AX
+  updateCur:   push AX ; backup new cursor position
                mov AL,[settings] ; get video mode
                cmp AL,0
                je ucText
                cmp AL,1
-               ;je ucJr
+               je ucJr
                cmp AL,2
                ;je ucCGA
                cmp AL,3
                ;je ucEGA
                pop AX
                jmp ucDone
-  ucText:      mov AH,2
-               mov DX,BX
+               ;
+               ; Print cursor to screen
+               ;
+  ucText:      mov AH,2      ; BIOS video function 2, set cursor - DOS function 2, print single char
+               mov DX,BX     ; place old cursor position in DX
                shl DX,1
-               shl DX,1 ; multiply row and column by 4
-               xor BH,BH
-               ;push DX
-               ;add DX,101h ; add 1 to row, and 1 to column
-               ;int 10h
-               ;mov DL,20h ; space
-               ;int 21h
-               ;pop DX
-               ;push DX
-               add DX,301h ; add 3 to row, and 1 to column
-               int 10h
-               mov DL,20h ; space
-               int 21h
-               ;pop DX
-               ;push DX
-               ;add DX,200h ; add 2 to row, and 0 to column
-               ;int 10h
-               ;mov DL,20h ; space
-               ;int 21h
-               ;pop DX
-               ;add DX,202h ; add 2 to row, and 2 to column
-               ;int 10h
-               ;mov DL,20h ; space
-               ;int 21h
-               pop AX
-               mov cursor,AX
-               mov DX,AX
+               shl DX,1      ; multiply row and column by 4
+               xor BH,BH     ; page 0
+               add DX,301h   ; add 3 to row, and 1 to column
+               int 10h       ; call BIOS video
+               mov DL,20h    ; space
+               int 21h       ; call DOS
+               pop AX        ; restore new cursor position
+               mov cursor,AX ; update memory
+               mov DX,AX     ; and place in DX
                shl DX,1
-               shl DX,1
-               mov AH,2
-               xor BH,BH
-               ;push DX
-               ;add DX,101h ; add 1 to row, and 1 to column
-               ;int 10h
-               ;mov DL,0DCh ; horizontal bar, lower
-               ;int 21h
-               ;pop DX
-               ;push DX
-               add DX,301h ; add 3 to row, and 1 to column
-               int 10h
-               mov DL,0DFh ; horizontal bar, upper
-               int 21h
-               ;pop DX
-               ;push DX
-               ;add DX,200h ; add 2 to row, and 0 to column
-               ;int 10h
-               ;mov DL,0DEh ; vertical bar, right
-               ;int 21h
-               ;pop DX
-               ;add DX,202h ; add 2 to row, and 2 to column
-               ;int 10h
-               ;mov DL,0DDh ; vertical bar, left
-               ;int 21h
+               shl DX,1      ; cursor position * 4
+               mov AH,2      ; BIOS video function 2, set cursor - DOS function 2, print single char
+               xor BH,BH     ; page 0
+               add DX,301h   ; add 3 to row, and 1 to column
+               int 10h       ; call BIOS video
+               mov DL,0DFh   ; horizontal bar, upper
+               int 21h       ; call DOS
                jmp ucDone
+               ;
+               ; Draw cursor on screen
+               ;
+  ucJr:        shl BX,1
+               shl BX,1    ; old cursor position * 4
+               mov DL,BH
+               xor DH,DH
+               mov AX,280h ; 4 pixel rows = 280h
+               mul DX      ; multiply by row
+               add AX,1E0h ; add 3 more pixel rows (we want to begin placing pixels at the very bottom of this "tile")
+               shl BL,1
+               shl BL,1
+               shl BL,1 ; column * 8
+               xor BH,BH ; remove BH
+               add BX,AX ; BX = AX + BX
+               add BX,6000h ; move to bank 3
+               add BX,7 ; move 8 pixels right
+               mov AX,0
+               mov DI,BX
+               mov CX,5 ; 5
+               rep stosw
+               sub DI,5F6Ah ; add 96h, but move to bank 0 (96 gets back to our original position + one row)
+               mov ES:[DI],BYTE PTR 0
+               add DI,9
+               mov ES:[DI],BYTE PTR 0
+               add DI,1FF7h ; subtract 9, then move to bank 1
+               mov ES:[DI],BYTE PTR 0
+               add DI,9
+               mov ES:[DI],BYTE PTR 0
+               add DI,1FF7h ; subtract 9, then move to bank 2
+               mov ES:[DI],BYTE PTR 0
+               add DI,9
+               mov ES:[DI],BYTE PTR 0
+               add DI,1FF7h ; subtract 9, then move to bank 3
+               mov ES:[DI],BYTE PTR 0
+               add DI,9
+               mov ES:[DI],BYTE PTR 0
+               pop AX ; restore new cursor position
+               mov cursor,AX ; update memory
+               mov BX,AX ; and place in BX
+               shl BX,1
+               shl BX,1 ; new cursor position * 4
+               mov DL,BH
+               xor DH,DH
+               mov AX,280h ; 4 pixel rows
+               mul DX ; multiply by row
+               add AX,1E0h ; add 3 more pixel rows
+               shl BL,1
+               shl BL,1
+               shl BL,1 ; column * 8
+               xor BH,BH ; remove BH
+               add BX,AX ; BX = AX + BX
+               add BX,6000h ; move to bank 3
+               add BX,7 ; move 14 pixels right
+               mov ES:[BX],BYTE PTR 0Fh ; set pixel white
+               inc BX
+               mov DI,BX
+               mov AX,0FFFFh
+               mov CX,4
+               rep stosw
+               mov BX,DI
+               mov ES:[BX],BYTE PTR 0F0h ; white pixel
+               sub DI,5F69h ; add 97h, but move to bank 0 (97 gets back to our original position + one row)
+               mov ES:[DI],BYTE PTR 0Fh
+               add DI,9
+               mov ES:[DI],BYTE PTR 0F0h
+               add DI,1FF7h ; subtract 9, then move to bank 1
+               mov ES:[DI],BYTE PTR 0Fh
+               add DI,9
+               mov ES:[DI],BYTE PTR 0F0h
+               add DI,1FF7h ; subtract 9, then move to bank 2
+               mov ES:[DI],BYTE PTR 0Fh
+               add DI,9
+               mov ES:[DI],BYTE PTR 0F0h
+               add DI,1FF7h ; subtract 9, then move to bank 3
+               mov ES:[DI],BYTE PTR 0Fh
+               add DI,9
+               mov ES:[DI],BYTE PTR 0F0h
   ucDone:      jmp userInput
                ;
                ; Help screen
