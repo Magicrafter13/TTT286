@@ -46,6 +46,7 @@ videos    DB  " 1 - Text only (default)",'$', ; add 19h to get next line
 gameVars  DW  0                               ; lsb is the current player (0 = x, 1 = y), bits 1-15 are board layout (5 bits per row)
 board     DB  "   ³   ³   ÄÄÄÅÄÄÄÅÄÄÄ"        ; building blocks of the game board
 pieces    DB  "XO",0                          ; possible pieces to place on board
+cursor    DW  0101h
 vidmodes  DB  3,9,4,0Dh                       ; video mode 3 (80x25 text), 9 is PCjr/Tandy 1000 320x200 16 color, 4 is CGA 320x200 4 color, D is EGA 320x200 16 color
           ; byte 0 = current video mode
           ; byte 1 = system video mode
@@ -246,7 +247,8 @@ NoFile:      push DX             ; backup filename
              ;
              ; Initialize game
              ;
-InitGame:    mov gameVars,0    ; refresh variables
+InitGame:    mov cursor,101h   ; reset cursor position
+             mov gameVars,0    ; refresh variables
              cmp [pieces+2],0  ; check winner
              jz ClearScreen    ; if no winner was set, continue game
              mov AL,[pieces+2] ; get winner
@@ -354,21 +356,150 @@ clsEGA:      call drawBoardEGA
                je printHelp ; print help text
                cmp AL,68h   ; compare AL to 68 which corresponds to lowercase 'h'
                je printHelp ; print help text
+               cmp AL,0     ; check for 0
+               je testSpecial
                ;
                ; Check for winner (if someone has won, allow no more board changes
                ;
                cmp [pieces+2],0 ; see if there is a winner
                jnz userInput    ; if there is, then we won't allow any further changes to the board
+               cmp AL,20h       ; check if space was pressesd
+               jne uiNumbers    ; if not, continue
+               mov AX,cursor    ; place cursor location in AX
+               mov BH,2         ; place 2 in BH
+               sub BH,AH        ; so we can invert the row
+               mov AH,BH        ; copy to BX
+               shl AH,1
+               add AH,BH        ; AH * 3
+               add AL,AH        ; add to AL
+               add AL,31h       ; then add 31h as if a number had been pressed by the user
                ;
                ; Check if 1-9 were pressed, if so, attempt to update game board
                ;
-               sub AL,31h      ; ascii for 1 is 31h, so turn that into a 0
+  uiNumbers:   sub AL,31h      ; ascii for 1 is 31h, so turn that into a 0
                cmp AL,9        ; now subtract 9, that way if it is 0-8 we will trigger the carry flag
                jae userInput   ; if they did not input 1-9, then don't try anything (continue)
                call tryMove    ; attempt the requested move, if it is valid, the board will be updated, and the player will change
                cmp DL,0        ; check if board was updated
                jne userInput   ; if not, don't redraw
                jmp startGame   ; refresh screen
+               ;
+               ; Test for special keys
+               ;
+  testSpecial: int 21h        ; Call DOS again
+               cmp AL,48h     ; 48 is returned if the up arrow was pressed
+               je cursorUp    ; move up
+               cmp AL,4Bh     ; 4B is returned if the left arrow was pressed
+               je cursorLeft  ; move left
+               cmp AL,4Dh     ; 4D is returned if the right arrow was pressed
+               je cursorRight ; move right
+               cmp AL,50h     ; 50 is returned if the down arrow was pressed
+               je cursorDown  ; move down
+               jmp userInput  ; return
+               ;
+               ; Move cursor
+               ;
+  cursorUp:    mov AX,cursor ; get current position
+               mov BX,AX     ; copy into BX
+               dec AH        ; increase row
+               cmp AH,2      ; check if we're still within the bounds
+               jb updateCur  ; update
+               mov AH,2      ; if not, set row to 0
+               jmp updateCur ; then update
+  cursorLeft:  mov AX,cursor ; get current position
+               mov BX,AX     ; copy into BX
+               dec AL        ; decrease column
+               cmp AL,2      ; check if we're still within the bounds
+               jb updateCur  ; update
+               mov AL,2      ; if not, set column to 2
+               jmp updateCur ; then update
+  cursorRight: mov AX,cursor ; get current position
+               mov BX,AX     ; copy into BX
+               inc AL        ; increase column
+               cmp AL,3      ; check if we're still within the bounds
+               jb updateCur  ; update
+               xor AL,AL     ; if not, set column to 0
+               jmp updateCur ; then update
+  cursorDown:  mov AX,cursor ; get current position
+               mov BX,AX     ; copy into BX
+               inc AH        ; decrease row
+               cmp AH,3      ; check if we're still within the bounds
+               jb updateCur  ; update
+               xor AH,AH     ; if not, set row to 2
+               jmp updateCur ; then update
+               ;
+               ; Draw cursor and update memory
+               ;
+  updateCur:   push AX
+               mov AL,[settings] ; get video mode
+               cmp AL,0
+               je ucText
+               cmp AL,1
+               ;je ucJr
+               cmp AL,2
+               ;je ucCGA
+               cmp AL,3
+               ;je ucEGA
+               pop AX
+               jmp ucDone
+  ucText:      mov AH,2
+               mov DX,BX
+               shl DX,1
+               shl DX,1 ; multiply row and column by 4
+               xor BH,BH
+               ;push DX
+               ;add DX,101h ; add 1 to row, and 1 to column
+               ;int 10h
+               ;mov DL,20h ; space
+               ;int 21h
+               ;pop DX
+               ;push DX
+               add DX,301h ; add 3 to row, and 1 to column
+               int 10h
+               mov DL,20h ; space
+               int 21h
+               ;pop DX
+               ;push DX
+               ;add DX,200h ; add 2 to row, and 0 to column
+               ;int 10h
+               ;mov DL,20h ; space
+               ;int 21h
+               ;pop DX
+               ;add DX,202h ; add 2 to row, and 2 to column
+               ;int 10h
+               ;mov DL,20h ; space
+               ;int 21h
+               pop AX
+               mov cursor,AX
+               mov DX,AX
+               shl DX,1
+               shl DX,1
+               mov AH,2
+               xor BH,BH
+               ;push DX
+               ;add DX,101h ; add 1 to row, and 1 to column
+               ;int 10h
+               ;mov DL,0DCh ; horizontal bar, lower
+               ;int 21h
+               ;pop DX
+               ;push DX
+               add DX,301h ; add 3 to row, and 1 to column
+               int 10h
+               mov DL,0DFh ; horizontal bar, upper
+               int 21h
+               ;pop DX
+               ;push DX
+               ;add DX,200h ; add 2 to row, and 0 to column
+               ;int 10h
+               ;mov DL,0DEh ; vertical bar, right
+               ;int 21h
+               ;pop DX
+               ;add DX,202h ; add 2 to row, and 2 to column
+               ;int 10h
+               ;mov DL,0DDh ; vertical bar, left
+               ;int 21h
+               jmp ucDone
+  ucDone:      jmp userInput
                ;
                ; Help screen
                ;
