@@ -78,7 +78,7 @@ cgadata   DB  "CGA.BIN",0,'$'                 ; location of binary data for CGA 
           ; EGA graphics data
           ; sprite offsets identical to PCjr/Tandy 1000 graphics data
 egadata   DB  "EGA.BIN",0,'$'                 ; location of binary data for EGA graphics
-grpieces  DB  880h DUP ('#')                  ; reserve 2176 bytes for the PCjr/Tandy graphics
+grpieces  DB  0B00h DUP ('#')                 ; reserve 2688 bytes for the graphics data
 pattern   equ 88h                             ; takes the binary form of 10001000, which, if shifted right,
                                               ; will let me draw board chunk 0,0,0,1,0,0,0,1,0,0,0 while only using 1 byte for the pattern
 vidcount  equ 4                               ; there are currently 2 video options
@@ -186,7 +186,7 @@ JrInit:        mov DX,03D8h ; Mode Select
                jc NoFile       ; if carry flag set, error
                mov BX,AX       ; place file handle in BX
                mov AH,3Fh      ; DOS function 3F, read from file or device
-               mov CX,0880h    ; load 17 sprites of 80h bytes each
+               mov CX,0B00h    ; load 21 sprites of 80h bytes each
                lea DX,grpieces ; set address to load data
                int 21h         ; call DOS
                jmp InitGame
@@ -364,8 +364,11 @@ clsEGA:      call drawBoardEGA
                cmp [pieces+2],0 ; see if there is a winner
                jnz userInput    ; if there is, then we won't allow any further changes to the board
                cmp AL,20h       ; check if space was pressesd
-               jne uiNumbers    ; if not, continue
-               mov AX,cursor    ; place cursor location in AX
+               je cursorPlace   ; if so, try move
+               cmp AL,0Dh       ; check if enter was pressed
+               je cursorPlace
+               jmp uiNumbers    ; if not, continue
+  cursorPlace: mov AX,cursor    ; place cursor location in AX
                mov BH,2         ; place 2 in BH
                sub BH,AH        ; so we can invert the row
                mov AH,BH        ; copy to BX
@@ -475,34 +478,20 @@ clsEGA:      call drawBoardEGA
                xor DH,DH
                mov AX,280h ; 4 pixel rows = 280h
                mul DX      ; multiply by row
-               add AX,1E0h ; add 3 more pixel rows (we want to begin placing pixels at the very bottom of this "tile")
+               inc BL ; one more column
                shl BL,1
                shl BL,1
                shl BL,1 ; column * 8
                xor BH,BH ; remove BH
-               add BX,AX ; BX = AX + BX
-               add BX,6000h ; move to bank 3
-               add BX,7 ; move 8 pixels right
-               mov AX,0
-               mov DI,BX
-               mov CX,5 ; 5
-               rep stosw
-               sub DI,5F6Ah ; add 96h, but move to bank 0 (96 gets back to our original position + one row)
-               mov ES:[DI],BYTE PTR 0
-               add DI,9
-               mov ES:[DI],BYTE PTR 0
-               add DI,1FF7h ; subtract 9, then move to bank 1
-               mov ES:[DI],BYTE PTR 0
-               add DI,9
-               mov ES:[DI],BYTE PTR 0
-               add DI,1FF7h ; subtract 9, then move to bank 2
-               mov ES:[DI],BYTE PTR 0
-               add DI,9
-               mov ES:[DI],BYTE PTR 0
-               add DI,1FF7h ; subtract 9, then move to bank 3
-               mov ES:[DI],BYTE PTR 0
-               add DI,9
-               mov ES:[DI],BYTE PTR 0
+               add AX,BX ; add offset to AX
+               mov BX,0A80h
+               call JrDrawSpr
+               add AX,278h
+               call JrDrawSpr
+               add AX,10h ; move 32 pixels right
+               call JrDrawSpr
+               add AX,278h
+               call JrDrawSpr
                pop AX ; restore new cursor position
                mov cursor,AX ; update memory
                mov BX,AX ; and place in BX
@@ -512,38 +501,24 @@ clsEGA:      call drawBoardEGA
                xor DH,DH
                mov AX,280h ; 4 pixel rows
                mul DX ; multiply by row
-               add AX,1E0h ; add 3 more pixel rows
+               inc BL ; one more column
                shl BL,1
                shl BL,1
                shl BL,1 ; column * 8
                xor BH,BH ; remove BH
-               add BX,AX ; BX = AX + BX
-               add BX,6000h ; move to bank 3
-               add BX,7 ; move 14 pixels right
-               mov ES:[BX],BYTE PTR 0Fh ; set pixel white
-               inc BX
-               mov DI,BX
-               mov AX,0FFFFh
-               mov CX,4
-               rep stosw
-               mov BX,DI
-               mov ES:[BX],BYTE PTR 0F0h ; white pixel
-               sub DI,5F69h ; add 97h, but move to bank 0 (97 gets back to our original position + one row)
-               mov ES:[DI],BYTE PTR 0Fh
-               add DI,9
-               mov ES:[DI],BYTE PTR 0F0h
-               add DI,1FF7h ; subtract 9, then move to bank 1
-               mov ES:[DI],BYTE PTR 0Fh
-               add DI,9
-               mov ES:[DI],BYTE PTR 0F0h
-               add DI,1FF7h ; subtract 9, then move to bank 2
-               mov ES:[DI],BYTE PTR 0Fh
-               add DI,9
-               mov ES:[DI],BYTE PTR 0F0h
-               add DI,1FF7h ; subtract 9, then move to bank 3
-               mov ES:[DI],BYTE PTR 0Fh
-               add DI,9
-               mov ES:[DI],BYTE PTR 0F0h
+               add AX,BX ; add offset to AX
+               mov BX,880h
+               call JrDrawSpr
+               add AX,278h
+               mov BX,900h
+               call JrDrawSpr
+               add AX,10h ; move 32 pixels right
+               mov BX,980h
+               call JrDrawSpr
+               add AX,278h
+               mov BX,0A00h
+               call JrDrawSpr
+               jmp ucDone
   ucDone:      jmp userInput
                ;
                ; Help screen
