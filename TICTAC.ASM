@@ -321,7 +321,7 @@ clsEGA:      call drawBoardEGA
                ;
                ; Draw player on screen
                ;
-  turnCGA:     mov AX,1B9Ch    ; location where 'fancy' x and o go
+  turnCGA:     mov AX,1B8Eh    ; location where 'fancy' x and o go
                mov BX,180h     ; location of 'fancy x' sprite
                test gameVars,1 ; check current player
                jz turnCGACont  ; if 0, do nothing
