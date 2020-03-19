@@ -194,7 +194,7 @@ JrInit:        mov DX,03D8h ; Mode Select
              ; CGA graphics initialization
              ;
 CGAInit:       mov DX,3D8h ; CGA Mode control register
-               mov AL,2    ; bit 1 = graphics mode
+               mov AL,0Ah  ; bit 1 = graphics mode
                out DX,AL
                mov DX,3D9h ; CGA Color control register
                mov AL,20h  ; bit 5 = palette ('snow'), bit 4 = high intensity mode (which I don't want)
@@ -1257,6 +1257,7 @@ twTest4R:   mov AX,gameVars ; get game data
             ;
 twWin:      mov AX,gameVars   ; get data
             and AX,1          ; only want LSB
+            push AX           ; backup winner
             add AX,1          ; increase by one that way we get X or O, instead of space or X
             mov [pieces+2],AL ; set winner
             mov BH,[settings] ; get video mode
@@ -1268,6 +1269,7 @@ twWin:      mov AX,gameVars   ; get data
             je twWinCGA       ; draw winning message
             cmp BH,3          ; test EGA
             je twWinEGA       ; draw winning message
+            pop AX            ; what we push, we pop!
             jmp twEnd         ; unknown mode, skip section
             ;
             ; Congratulatory message, text
@@ -1276,8 +1278,7 @@ twWinText:  mov AH,2        ; BIOS video function 2, set cursor position
             xor BH,BH       ; page 0
             mov DX,0C00h    ; row 12, column 0
             int 10h         ; call BIOS video
-            xor AH,AH       ; remove bios video function
-            dec AL          ; back to winning player
+            pop AX          ; restore winner
             lea BX,pieces   ; get player characters
             add BX,AX       ; offset to X or O
             mov DX,1        ; string length of 1
@@ -1288,8 +1289,7 @@ twWinText:  mov AH,2        ; BIOS video function 2, set cursor position
             ;
             ; Congratulatory message, PCjr/Tandy 1000
             ;
-twWinJr:    push AX        ; backup winner offset
-            mov AX,1B80h   ; screen location for "Your Move", and "Winner:" message
+twWinJr:    mov AX,1B80h   ; screen location for "Your Move", and "Winner:" message
             mov BX,400h    ; sprite 8, beginning of "Winner:" message
             call JrDrawSpr ; draw sprite 1
             add AX,8       ; move 8 bytes right
@@ -1307,7 +1307,7 @@ twWinJr:    push AX        ; backup winner offset
             add AX,0Ch     ; move 12 bytes right (1.5 tiles)
             pop BX         ; restore winner offset
             shl BX,7       ; multiply by 128
-            add BX,280h    ; then add 280h, now we will be positioned at the 'fancy x', or 'fancy o' sprite
+            add BX,300h    ; then add 300h, now we will be positioned at the 'fancy x', or 'fancy o' sprite
             call JrDrawSpr ; draw said sprite
             add AX,0Ch     ; move 12 bytes right
             mov BX,800h    ; sprite 16, trophy
@@ -1316,8 +1316,7 @@ twWinJr:    push AX        ; backup winner offset
             ;
             ; Congratulatory message, CGA
             ;
-twWinCGA:   push AX         ; backup winner offset
-            mov AX,1B80h    ; screen location for "Your Move", and "Winner:" message
+twWinCGA:   mov AX,1B80h    ; screen location for "Your Move", and "Winner:" message
             mov BX,200h     ; sprite 8, beginning of "Winner:" message
             call CGADrawSpr ; draw sprite 1
             add AX,4        ; move 4 bytes right
@@ -1335,7 +1334,7 @@ twWinCGA:   push AX         ; backup winner offset
             add AX,6        ; move 6 bytes right (1.5 tiles)
             pop BX          ; restore winner offset
             shl BX,6        ; multiply by 64 (64 = 40h, which is the size of each sprite)
-            add BX,140h     ; then add 140h, now we will be positioned at the 'fancy x', or 'fancy o' sprite
+            add BX,180h     ; then add 180h, now we will be positioned at the 'fancy x', or 'fancy o' sprite
             call CGADrawSpr ; draw said sprite
             add AX,6        ; move 6 bytes right
             mov BX,400h     ; sprite 16, trophy
@@ -1344,8 +1343,7 @@ twWinCGA:   push AX         ; backup winner offset
             ;
             ; Congratulatory message, EGA
             ;
-twWinEGA:   push AX         ; backup winner offset
-            mov AX,1B80h    ; screen location for "Your Move", and "Winner:" message
+twWinEGA:   mov AX,1B80h    ; screen location for "Your Move", and "Winner:" message
             mov BX,400h     ; sprite 8, beginning of "Winner:" message
             call EGADrawSpr ; draw sprite 1
             add AX,2        ; move 2 bytes right
@@ -1363,7 +1361,7 @@ twWinEGA:   push AX         ; backup winner offset
             add AX,3        ; move 3 bytes right (1.5 tiles)
             pop BX          ; restore winner offset
             shl BX,7        ; multiply by 128
-            add BX,280h     ; then add 280h, now we will be positioned at the 'fancy x', or 'fancy o' sprite
+            add BX,300h     ; then add 300h, now we will be positioned at the 'fancy x', or 'fancy o' sprite
             call EGADrawSpr ; draw said sprite
             add AX,3        ; move 3 bytes right
             mov BX,800h     ; sprite 16, trophy
