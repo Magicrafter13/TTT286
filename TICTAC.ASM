@@ -218,6 +218,9 @@ CGAInit:       mov DX,3D8h ; CGA Mode control register
              ;
 EGAInit:       mov BX,0A000h
                mov ES,BX
+               mov DX,3C0h ; EGA Mode Control register
+               mov AL,1    ; bit 0 = graphics mode
+               out DX,AL
                ;
                ; Load Graphics from File
                ;
