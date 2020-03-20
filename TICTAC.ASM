@@ -209,9 +209,14 @@ CGAInit:       mov DX,3D8h ; CGA Mode control register
                jc NoFile       ; if carry flag set, error
                mov BX,AX       ; place file handle in BX
                mov AH,3Fh      ; DOS function 3F, read from file or device
-               mov CX,0440h    ; read 17 sprites of 40h bytes each
+               mov CX,0580h    ; read 17 sprites of 40h bytes each
                lea DX,grpieces ; get memory address where graphics are to be stored
                int 21h         ; call DOS (now CGA graphics are in RAM)
+               mov BX,440h
+               mov AX,0
+               call CGADrawSpr
+               mov AH,7
+               int 21h
                jmp InitGame
              ;
              ; EGA graphics initialization
@@ -443,7 +448,7 @@ clsEGA:      call drawBoardEGA
                cmp AL,1
                je ucJr
                cmp AL,2
-               ;je ucCGA
+               je ucCGA
                cmp AL,3
                ;je ucEGA
                pop AX
@@ -521,6 +526,51 @@ clsEGA:      call drawBoardEGA
                add AX,278h
                mov BX,0A00h
                call JrDrawSpr
+               jmp ucDone
+  ucCGA:       shl BX,1
+               shl BX,1    ; old cursor position * 4
+               mov DL,BH
+               xor DH,DH
+               mov AX,280h ; 4 pixel rows = 140h
+               mul DX      ; multiply by row
+               inc BL ; one more column
+               shl BL,1
+               shl BL,1 ; column * 4
+               xor BH,BH ; remove BH
+               add AX,BX ; add offset to AX
+               mov BX,0540h
+               call CGADrawSpr
+               add AX,27Ch
+               call CGADrawSpr
+               add AX,8 ; move 32 pixels right
+               call CGADrawSpr
+               add AX,27Ch
+               call CGADrawSpr
+               pop AX ; restore new cursor position
+               mov cursor,AX ; update memory
+               mov BX,AX ; and place in BX
+               shl BX,1
+               shl BX,1 ; new cursor position * 4
+               mov DL,BH
+               xor DH,DH
+               mov AX,280h ; 4 pixel rows
+               mul DX ; multiply by row
+               inc BL ; one more column
+               shl BL,1
+               shl BL,1 ; column * 4
+               xor BH,BH ; remove BH
+               add AX,BX ; add offset to AX
+               mov BX,440h
+               call CGADrawSpr
+               add AX,27Ch
+               mov BX,480h
+               call CGADrawSpr
+               add AX,8 ; move 32 pixels right
+               mov BX,4C0h
+               call CGADrawSpr
+               add AX,27Ch
+               mov BX,500h
+               call CGADrawSpr
                jmp ucDone
   ucDone:      jmp userInput
                ;
