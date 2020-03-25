@@ -62,6 +62,11 @@ settings  DB  2 DUP (0)
           ;   sprite   14 = horizontal bar                - 700h
           ;   sprite   15 = horizontal/vertical cross bar - 780h
           ;   sprite   16 = trophy                        - 800h
+          ;   sprite   17 = top cursor arrow              - 880h
+          ;   sprite   18 = left cursor arrow             - 900h
+          ;   sprite   19 = right cursor arrow            - 980h
+          ;   sprite   20 = bottom cursor arrow           - A00h
+          ;   sprite   21 = blank                         - A80h
 jrdata    DB  "JR.BIN",0,'$'                  ; location of binary data for PCjr/Tandy graphics
           ; CGA graphics data
           ;   sprite    0 = X                             -   0h
@@ -74,6 +79,11 @@ jrdata    DB  "JR.BIN",0,'$'                  ; location of binary data for PCjr
           ;   sprite   14 = horizontal bar                - 380h
           ;   sprite   15 = horizontal/vertical cross bar - 3C0h
           ;   sprite   16 = trophy                        - 400h
+          ;   sprite   17 = top cursor arrow              - 440h
+          ;   sprite   18 = left cursor arrow             - 480h
+          ;   sprite   19 = right cursor arrow            - 4C0h
+          ;   sprite   20 = bottom cursor arrow           - 500h
+          ;   sprite   21 = blank                         - 540h
 cgadata   DB  "CGA.BIN",0,'$'                 ; location of binary data for CGA graphics
           ; EGA graphics data
           ; sprite offsets identical to PCjr/Tandy 1000 graphics data
@@ -231,7 +241,7 @@ EGAInit:       mov BX,0A000h
                jc NoFile       ; if carry flag set, error
                mov BX,AX       ; place file handle in BX
                mov AH,3Fh      ; DOS function 3F, read from file or device
-               mov CX,0880h    ; load 17 sprites of 80h bytes each
+               mov CX,0B00h    ; load 17 sprites of 80h bytes each
                lea DX,grpieces ; set address to load data
                int 21h         ; call DOS
                jmp InitGame
@@ -436,18 +446,18 @@ clsEGA:      call drawBoardEGA
                ;
                ; Draw cursor and update memory
                ;
-  updateCur:   push AX ; backup new cursor position
+  updateCur:   push AX           ; backup new cursor position
                mov AL,[settings] ; get video mode
-               cmp AL,0
+               cmp AL,0          ; test text mode
                je ucText
-               cmp AL,1
+               cmp AL,1          ; test PCjr/Tandy 1000 mode
                je ucJr
-               cmp AL,2
+               cmp AL,2          ; test CGA mode
                je ucCGA
-               cmp AL,3
-               ;je ucEGA
-               pop AX
-               jmp ucDone
+               cmp AL,3          ; test EGA mode
+               je ucEGA
+               pop AX            ; what we push, we must pop
+               jmp userInput     ; can't determine video mode, so do nothing
                ;
                ; Print cursor to screen
                ;
@@ -471,156 +481,151 @@ clsEGA:      call drawBoardEGA
                int 10h       ; call BIOS video
                mov DL,0DFh   ; horizontal bar, upper
                int 21h       ; call DOS
-               jmp ucDone
+               jmp userInput
                ;
                ; Draw cursor on screen
                ;
   ucJr:        shl BX,1
-               shl BX,1    ; old cursor position * 4
-               mov DL,BH
-               xor DH,DH
-               mov AX,280h ; 4 pixel rows = 280h
-               mul DX      ; multiply by row
-               inc BL ; one more column
+               shl BX,1      ; old cursor position * 4
+               mov DL,BH     ; place row in DL
+               xor DH,DH     ; 0 out DH
+               mov AX,280h   ; 4 pixel rows = 280h
+               mul DX        ; multiply by row
+               inc BL        ; one more column
                shl BL,1
                shl BL,1
-               shl BL,1 ; column * 8
-               xor BH,BH ; remove BH
-               add AX,BX ; add offset to AX
-               mov BX,0A80h
+               shl BL,1      ; column * 8
+               xor BH,BH     ; remove BH
+               add AX,BX     ; add offset to AX
+               mov BX,0A80h  ; sprite 21, blank
                call JrDrawSpr
-               add AX,278h
+               add AX,278h   ; next sprite row, but 16 pixels left
                call JrDrawSpr
-               add AX,10h ; move 32 pixels right
+               add AX,10h    ; move 32 pixels right
                call JrDrawSpr
-               add AX,278h
+               add AX,278h   ; next sprite row, but 16 pixels left
                call JrDrawSpr
-               pop AX ; restore new cursor position
+               pop AX        ; restore new cursor position
                mov cursor,AX ; update memory
-               mov BX,AX ; and place in BX
+               mov BX,AX     ; and place in BX
                shl BX,1
-               shl BX,1 ; new cursor position * 4
-               mov DL,BH
-               xor DH,DH
-               mov AX,280h ; 4 pixel rows
-               mul DX ; multiply by row
-               inc BL ; one more column
+               shl BX,1      ; new cursor position * 4
+               mov DL,BH     ; place row in DL
+               xor DH,DH     ; 0 out DH
+               mov AX,280h   ; 4 pixel rows
+               mul DX        ; multiply by row
+               inc BL        ; one more column
                shl BL,1
                shl BL,1
-               shl BL,1 ; column * 8
-               xor BH,BH ; remove BH
-               add AX,BX ; add offset to AX
-               mov BX,880h
+               shl BL,1      ; column * 8
+               xor BH,BH     ; remove BH
+               add AX,BX     ; add offset to AX
+               mov BX,880h   ; sprite 17, top cursor arrow
                call JrDrawSpr
-               add AX,278h
-               mov BX,900h
+               add AX,278h   ; one sprite row down, and one sprite column left
+               mov BX,900h   ; sprite 18, left cursor arrow
                call JrDrawSpr
-               add AX,10h ; move 32 pixels right
-               mov BX,980h
+               add AX,10h    ; move 32 pixels right
+               mov BX,980h   ; sprite 19, right cursor arrow
                call JrDrawSpr
-               add AX,278h
-               mov BX,0A00h
+               add AX,278h   ; one sprite row down, and one sprite column left
+               mov BX,0A00h  ; sprite 20, bottom cursor arrow
                call JrDrawSpr
-               jmp ucDone
+               jmp userInput
                ;
                ; Draw cursor on screen
                ;
   ucCGA:       shl BX,1
-               shl BX,1    ; old cursor position * 4
-               mov DL,BH
-               xor DH,DH
-               mov AX,280h ; 4 pixel rows = 140h
-               mul DX      ; multiply by row
-               inc BL ; one more column
+               shl BX,1      ; old cursor position * 4
+               mov DL,BH     ; place row in DL
+               xor DH,DH     ; 0 out DH
+               mov AX,280h   ; 4 pixel rows = 140h
+               mul DX        ; multiply by row
+               inc BL        ; one more column
                shl BL,1
-               shl BL,1 ; column * 4
-               xor BH,BH ; remove BH
-               add AX,BX ; add offset to AX
-               mov BX,0540h
+               shl BL,1      ; column * 4
+               xor BH,BH     ; remove BH
+               add AX,BX     ; add offset to AX
+               mov BX,0540h  ; sprite 21, blank
                call CGADrawSpr
-               add AX,27Ch
+               add AX,27Ch   ; next row, 16 pixels to the left
                call CGADrawSpr
-               add AX,8 ; move 32 pixels right
+               add AX,8      ; move 32 pixels right
                call CGADrawSpr
-               add AX,27Ch
+               add AX,27Ch   ; next row, 16 pixels to the left
                call CGADrawSpr
-               pop AX ; restore new cursor position
+               pop AX        ; restore new cursor position
                mov cursor,AX ; update memory
-               mov BX,AX ; and place in BX
+               mov BX,AX     ; and place in BX
                shl BX,1
-               shl BX,1 ; new cursor position * 4
-               mov DL,BH
-               xor DH,DH
-               mov AX,280h ; 4 pixel rows
-               mul DX ; multiply by row
-               inc BL ; one more column
+               shl BX,1      ; new cursor position * 4
+               mov DL,BH     ; place row in DL
+               xor DH,DH     ; 0 out DH
+               mov AX,280h   ; 4 pixel rows
+               mul DX        ; multiply by row
+               inc BL        ; one more column
                shl BL,1
-               shl BL,1 ; column * 4
-               xor BH,BH ; remove BH
-               add AX,BX ; add offset to AX
-               mov BX,440h
+               shl BL,1      ; column * 4
+               xor BH,BH     ; remove BH
+               add AX,BX     ; add offset to AX
+               mov BX,440h   ; sprite 17, top cursor arrow
                call CGADrawSpr
-               add AX,27Ch
-               mov BX,480h
+               add AX,27Ch   ; next row, 16 pixels to the left
+               mov BX,480h   ; sprite 18, left cursor arrow
                call CGADrawSpr
-               add AX,8 ; move 32 pixels right
-               mov BX,4C0h
+               add AX,8      ; move 32 pixels right
+               mov BX,4C0h   ; sprite 19, right cursor arrow
                call CGADrawSpr
-               add AX,27Ch
-               mov BX,500h
+               add AX,27Ch   ; next row, 16 pixels to the left
+               mov BX,500h   ; sprite 20, bottom cursor arrow
                call CGADrawSpr
-               jmp ucDone
+               jmp userInput
                ;
                ; Draw cursor on screen
                ;
   ucEGA:       shl BX,1
-               shl BX,1    ; old cursor position * 4
-               mov DL,BH
-               xor DH,DH
-               mov AX,280h ; 4 pixel rows = 280h
-               mul DX      ; multiply by row
-               inc BL ; one more column
-               shl BL,1
-               shl BL,1
-               shl BL,1 ; column * 8
-               xor BH,BH ; remove BH
-               add AX,BX ; add offset to AX
-               mov BX,0A80h
-               call JrDrawSpr
-               add AX,278h
-               call JrDrawSpr
-               add AX,10h ; move 32 pixels right
-               call JrDrawSpr
-               add AX,278h
-               call JrDrawSpr
-               pop AX ; restore new cursor position
+               shl BX,1      ; old cursor position * 4
+               mov DL,BH     ; place row in DL
+               xor DH,DH     ; 0 out DH
+               mov AX,280h   ; 4 pixel rows = 280h
+               mul DX        ; multiply by row
+               inc BL        ; one more column
+               shl BL,1      ; column * 2
+               xor BH,BH     ; remove BH
+               add AX,BX     ; add offset to AX
+               mov BX,0A80h  ; sprite 21, blank
+               call EGADrawSpr
+               add AX,27Eh   ; next row, 16 pixels to the left
+               call EGADrawSpr
+               add AX,4      ; move 32 pixels right
+               call EGADrawSpr
+               add AX,27Eh   ; next row, 16 pixels to the left
+               call EGADrawSpr
+               pop AX        ; restore new cursor position
                mov cursor,AX ; update memory
-               mov BX,AX ; and place in BX
+               mov BX,AX     ; and place in BX
                shl BX,1
-               shl BX,1 ; new cursor position * 4
-               mov DL,BH
-               xor DH,DH
-               mov AX,280h ; 4 pixel rows
-               mul DX ; multiply by row
-               inc BL ; one more column
-               shl BL,1
-               shl BL,1
-               shl BL,1 ; column * 8
-               xor BH,BH ; remove BH
-               add AX,BX ; add offset to AX
-               mov BX,880h
-               call JrDrawSpr
-               add AX,278h
-               mov BX,900h
-               call JrDrawSpr
-               add AX,10h ; move 32 pixels right
-               mov BX,980h
-               call JrDrawSpr
-               add AX,278h
-               mov BX,0A00h
-               call JrDrawSpr
-               jmp ucDone
-  ucDone:      jmp userInput
+               shl BX,1      ; new cursor position * 4
+               mov DL,BH     ; place row in DL
+               xor DH,DH     ; 0 out DH
+               mov AX,280h   ; 4 pixel rows
+               mul DX        ; multiply by row
+               inc BL        ; one more column
+               shl BL,1      ; column * 2
+               xor BH,BH     ; remove BH
+               add AX,BX     ; add offset to AX
+               mov BX,880h   ; sprite 17, top cursor arrow
+               call EGADrawSpr
+               add AX,27Eh   ; next row, 16 pixels to the left
+               mov BX,900h   ; sprite 18, left cursor arrow
+               call EGADrawSpr
+               add AX,4      ; move 32 pixels right
+               mov BX,980h   ; sprite 19, right cursor arrow
+               call EGADrawSpr
+               add AX,27Eh   ; next row, 16 pixels to the left
+               mov BX,0A00h  ; sprite 20, bottom cursor arrow
+               call EGADrawSpr
+               jmp userInput
                ;
                ; Help screen
                ;
