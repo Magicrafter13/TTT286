@@ -91,6 +91,7 @@ egadata   DB  "EGA.BIN",0,'$'                 ; location of binary data for EGA 
 grpieces  DB  0B00h DUP ('#')                 ; reserve 2688 bytes for the graphics data
 pattern   equ 88h                             ; takes the binary form of 10001000, which, if shifted right,
                                               ; will let me draw board chunk 0,0,0,1,0,0,0,1,0,0,0 while only using 1 byte for the pattern
+grpattern equ 24h
 vidcount  equ 4                               ; there are currently 2 video options
 
 MyData    ENDS
@@ -356,6 +357,17 @@ clsEGA:      call drawBoardEGA
                ;
   userInput:   mov AH,7 ; DOS function 07, get single character from keyboard (no echo)
                int 21h  ; Call DOS
+               ; test code, ignore plz
+               ;mov DX,62h ; 60h is the IO address of the 8255 PPI, the 3rd byte (C) is for input
+               ;in AL,60h  ; 60h is the 8255 PPI
+               ;mov BL,AL
+               ;in AL,61h
+               ;mov AH,AL
+               ;or AL,80h
+               ;out 61h,AL
+               ;xchg AH,AL
+               ;out 61h,AL
+               ;mov AL,BL
                ;
                ; Misc functions
                ;
@@ -941,20 +953,20 @@ drawBoardEGA PROC
              ;
              ; draw board
              ;
-             mov BX,pattern  ; pattern of rows
+             mov BX,grpattern ; pattern of rows
              xor AX,AX       ; begin at pixel 0,0
-dbEGAStart:  cmp AX,1B80h    ; check if we've drawn all 11 rows
+dbEGAStart:  cmp AX,1400h    ; check if we've drawn all 11 rows
              jae dbEGAEnd    ; if so, draw "Your Move" sprites
              test BX,1       ; check LSB
              jz dbEGA0       ; 0 represents a vertical bar row
              jnz dbEGA1      ; 1 represents a horizontal bar + cross row
 dbEGA0:      push BX         ; backup pattern
-             add AX,6        ; add 6
+             add AX,4        ; add 6
              mov BX,680h     ; sprite 13, vertical bar
              call EGADrawSpr ; draw first bar
-             add AX,8        ; add 32
+             add AX,6        ; add 48
              call EGADrawSpr ; draw second bar
-             add AX,272h     ; beginning of next row
+             add AX,276h     ; beginning of next row
              pop BX          ; restore pattern
              shr BX,1        ; next pattern
              jmp dbEGAStart  ; next iteration
@@ -964,28 +976,22 @@ dbEGA1:      push BX         ; backup pattern
              add AX,2        ; next grid space
              call EGADrawSpr ; draw horizontal bar 2
              add AX,2        ; next grid space
-             call EGADrawSpr ; draw horizontal bar 3
-             add AX,2        ; next grid space
              add BX,80h      ; sprite 15, cross
              call EGADrawSpr ; draw cross bar 1
              sub BX,80h      ; sprite 14, horizontal bar
              add AX,2        ; next grid space
+             call EGADrawSpr ; draw horizontal bar 3
+             add AX,2        ; next grid space
              call EGADrawSpr ; draw horizontal bar 4
-             add AX,2        ; next grid space
-             call EGADrawSpr ; draw horizontal bar 5
-             add AX,2        ; next grid space
-             call EGADrawSpr ; draw horizontal bar 6
              add AX,2        ; next grid space
              add BX,80h      ; sprite 15, cross
              call EGADrawSpr ; draw cross bar 2
              sub BX,80h      ; sprite 14, horizontal bar
              add AX,2        ; next grid space
-             call EGADrawSpr ; draw horizontal bar 7
+             call EGADrawSpr ; draw horizontal bar 5
              add AX,2        ; next grid space
-             call EGADrawSpr ; draw horizontal bar 8
-             add AX,2        ; final grid space
-             call EGADrawSpr ; draw horizontal bar 9
-             add AX,26Ch     ; beginning of next row (3C + 4B0)
+             call EGADrawSpr ; draw horizontal bar 6
+             add AX,272h     ; beginning of next row (3C + 4B0)
              pop BX          ; restore pattern
              shr BX,1        ; next pattern
              jmp dbEGAStart  ; next iteration
@@ -1204,19 +1210,16 @@ drawPieceCGA ENDP
 drawPieceEGA PROC
              push CX         ; backup row, column
              mov AL,CH       ; place row in AL
-             shl AL,1
-             shl AL,1        ; row * 4
-             inc AL          ; add 1
              xor AH,AH       ; remove upper byte
-             mov DX,280h     ; 160 * 4 (y-distance between sprites)
+             mov DX,780h     ; 160 * 4 (y-distance between sprites) * 3
              mul DX          ; multiply
+             add AX,140h     ; 8 pixel rows (half of sprite height)
              mov BX,AX       ; store video offset in BX
              mov AL,CL       ; place column in AL
              xor AH,AH       ; 0 out AH
-             shl AX,1
-             shl AX,1
-             shl AX,1        ; column * 4 * 2 = "y coordinate"
-             add AX,2        ; add one more column
+             mov DX,6        ; each piece should be 3 sprites (48 pixels) apart
+             mul DX
+             add AX,1        ; add 8 pixels
              add AX,BX       ; add to video offset (now offset is stored in AX)
              mov BX,gameVars ; get game data in BX
              and BX,1        ; only want player
