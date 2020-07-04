@@ -6,6 +6,12 @@ You may use the provided 'compile.bat' if you don't know which commands to use, 
 
 This program should assemble and run perfectly fine in DOSBox.
 
+# Playing
+You can either, Assemble the code yourself, or click on the Releases tab and download an assembled binary (an exe file). (Make sure to download a graphics file unless you want to play in text only.)
+Just type the name of the program at the DOS prompt, while in the same directory as the game, ie `C:\TTT286\> tictac` and press enter. Then select which mode you want to use.
+
+I think the controls are pretty intuitive, especially since there are 2 different ways you can play, but if you aren't sure, just press H to bring up the help screen. (May not work in all graphics modes, so if nothing happens, run the game in text mode first to learn the controls.)
+
 ## Modes
 1. Text Mode - Uses a mode 3, 80x25 text. (though it doesn't use that entire space)
 2. PCjr/Tandy 1000 - 320x200, 16 color mode (requires JR.BIN)
