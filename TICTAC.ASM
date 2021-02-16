@@ -241,7 +241,7 @@ CGAInit:       mov DX,3D8h ; CGA Mode control register
                jc NoFile       ; if carry flag set, error
                mov BX,AX       ; place file handle in BX
                mov AH,3Fh      ; DOS function 3F, read from file or device
-               mov CX,06C0h    ; read 17 sprites of 40h bytes each
+               mov CX,0800h    ; read 32 sprites of 40h bytes each
                lea DX,grpieces ; get memory address where graphics are to be stored
                int 21h         ; call DOS (now CGA graphics are in RAM)
                jmp InitGame
@@ -790,6 +790,21 @@ phText:        push DS         ; backup data segment
                call CGADrawSpr
                add BX,40h      ; Sprite 26 - 4
                add AX,9E0h     ; Middle left slot of board
+               call CGADrawSpr
+               add BX,40h      ; Sprite 27 - 5
+               add AX,10h      ; Middle slot of board
+               call CGADrawSpr
+               add BX,40h      ; Sprite 28 - 6
+               add AX,10h      ; Middle right slot of board
+               call CGADrawSpr
+               add BX,40h      ; Sprite 29 - 1
+               add AX,9E0h     ; Bottom left slot of board
+               call CGADrawSpr
+               add BX,40h      ; Sprite 30 - 2
+               add AX,10h      ; Bottom middle slot of board
+               call CGADrawSpr
+               add BX,40h      ; Sprite 31 - 3
+               add AX,10h      ; Bottom right slot of board
                call CGADrawSpr
 
                mov AH,7        ; DOS 07 - Read single char
