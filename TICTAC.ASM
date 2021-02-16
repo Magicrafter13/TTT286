@@ -66,7 +66,17 @@ settings  DB  2 DUP (0)
           ;   sprite   18 = left cursor arrow             - 900h
           ;   sprite   19 = right cursor arrow            - 980h
           ;   sprite   20 = bottom cursor arrow           - A00h
-          ;   sprite   21 = blank                         - A80h
+          ;   sprite   21 = quit                          - A80h
+          ;   sprite   22 = card "logo"                   - B00h
+          ;   sprite   23 = 7                             - B80h
+          ;   sprite   24 = 8                             - C00h
+          ;   sprite   25 = 9                             - C80h
+          ;   sprite   26 = 4                             - D00h
+          ;   sprite   27 = 5                             - D80h
+          ;   sprite   28 = 6                             - E00h
+          ;   sprite   29 = 1                             - E80h
+          ;   sprite   30 = 2                             - F00h
+          ;   sprite   31 = 3                             - F80h
 jrdata    DB  "JR.BIN",0,'$'                  ; location of binary data for PCjr/Tandy graphics
           ; CGA graphics data
           ;   sprite    0 = X                             -   0h
@@ -83,15 +93,26 @@ jrdata    DB  "JR.BIN",0,'$'                  ; location of binary data for PCjr
           ;   sprite   18 = left cursor arrow             - 480h
           ;   sprite   19 = right cursor arrow            - 4C0h
           ;   sprite   20 = bottom cursor arrow           - 500h
-          ;   sprite   21 = blank                         - 540h
+          ;   sprite   21 = quit                          - 540h
+          ;   sprite   22 = card "logo"                   - 580h
+          ;   sprite   23 = 7                             - 5C0h
+          ;   sprite   24 = 8                             - 600h
+          ;   sprite   25 = 9                             - 640h
+          ;   sprite   26 = 4                             - 680h
+          ;   sprite   27 = 5                             - 6C0h
+          ;   sprite   28 = 6                             - 700h
+          ;   sprite   29 = 1                             - 740h
+          ;   sprite   30 = 2                             - 780h
+          ;   sprite   31 = 3                             - 7C0h
 cgadata   DB  "CGA.BIN",0,'$'                 ; location of binary data for CGA graphics
           ; EGA graphics data
           ; sprite offsets identical to PCjr/Tandy 1000 graphics data
 egadata   DB  "EGA.BIN",0,'$'                 ; location of binary data for EGA graphics
-grpieces  DB  0B00h DUP ('#')                 ; reserve 2688 bytes for the graphics data
+grpieces  DB  1080h DUP (0)                   ; reserve 2688 bytes for the graphics data
+jrlast    equ 1000h
+cgalast   equ 0800h
 pattern   equ 88h                             ; takes the binary form of 10001000, which, if shifted right,
                                               ; will let me draw board chunk 0,0,0,1,0,0,0,1,0,0,0 while only using 1 byte for the pattern
-grpattern equ 24h
 vidcount  equ 4                               ; there are currently 2 video options
 
 MyData    ENDS
@@ -197,7 +218,7 @@ JrInit:        mov DX,03D8h ; Mode Select
                jc NoFile       ; if carry flag set, error
                mov BX,AX       ; place file handle in BX
                mov AH,3Fh      ; DOS function 3F, read from file or device
-               mov CX,0B00h    ; load 21 sprites of 80h bytes each
+               mov CX,0D80h    ; load 22 sprites of 80h bytes each
                lea DX,grpieces ; set address to load data
                int 21h         ; call DOS
                jmp InitGame
@@ -220,7 +241,7 @@ CGAInit:       mov DX,3D8h ; CGA Mode control register
                jc NoFile       ; if carry flag set, error
                mov BX,AX       ; place file handle in BX
                mov AH,3Fh      ; DOS function 3F, read from file or device
-               mov CX,0580h    ; read 17 sprites of 40h bytes each
+               mov CX,06C0h    ; read 17 sprites of 40h bytes each
                lea DX,grpieces ; get memory address where graphics are to be stored
                int 21h         ; call DOS (now CGA graphics are in RAM)
                jmp InitGame
@@ -242,7 +263,7 @@ EGAInit:       mov BX,0A000h
                jc NoFile       ; if carry flag set, error
                mov BX,AX       ; place file handle in BX
                mov AH,3Fh      ; DOS function 3F, read from file or device
-               mov CX,0B00h    ; load 17 sprites of 80h bytes each
+               mov CX,0C80h    ; load 22 sprites of 80h bytes each
                lea DX,grpieces ; set address to load data
                int 21h         ; call DOS
                jmp InitGame
@@ -509,7 +530,7 @@ clsEGA:      call drawBoardEGA
                shl BL,1      ; column * 8
                xor BH,BH     ; remove BH
                add AX,BX     ; add offset to AX
-               mov BX,0A80h  ; sprite 21, blank
+               mov BX,jrlast ; last sprite, blank
                call JrDrawSpr
                add AX,278h   ; next sprite row, but 16 pixels left
                call JrDrawSpr
@@ -548,17 +569,17 @@ clsEGA:      call drawBoardEGA
                ; Draw cursor on screen
                ;
   ucCGA:       shl BX,1
-               shl BX,1      ; old cursor position * 4
-               mov DL,BH     ; place row in DL
-               xor DH,DH     ; 0 out DH
-               mov AX,280h   ; 4 pixel rows = 140h
-               mul DX        ; multiply by row
-               inc BL        ; one more column
+               shl BX,1       ; old cursor position * 4
+               mov DL,BH      ; place row in DL
+               xor DH,DH      ; 0 out DH
+               mov AX,280h    ; 4 pixel rows = 140h
+               mul DX         ; multiply by row
+               inc BL         ; one more column
                shl BL,1
-               shl BL,1      ; column * 4
-               xor BH,BH     ; remove BH
-               add AX,BX     ; add offset to AX
-               mov BX,0540h  ; sprite 21, blank
+               shl BL,1       ; column * 4
+               xor BH,BH      ; remove BH
+               add AX,BX      ; add offset to AX
+               mov BX,cgalast ; last sprite, blank
                call CGADrawSpr
                add AX,27Ch   ; next row, 16 pixels to the left
                call CGADrawSpr
@@ -605,7 +626,7 @@ clsEGA:      call drawBoardEGA
                shl BL,1      ; column * 2
                xor BH,BH     ; remove BH
                add AX,BX     ; add offset to AX
-               mov BX,0A80h  ; sprite 21, blank
+               mov BX,jrlast ; last sprite, blank
                call EGADrawSpr
                add AX,27Eh   ; next row, 16 pixels to the left
                call EGADrawSpr
@@ -649,6 +670,8 @@ clsEGA:      call drawBoardEGA
                cmp AL,2          ; test CGA
                je phCGA
                cmp AL,3          ; test EGA
+               je phEGA
+               jmp userInput
                ;
                ; Print help message
                ;  Yes, this code is bad, just... consider it temporary I guess
@@ -686,15 +709,156 @@ phText:        push DS         ; backup data segment
                ;
                ; Draw help message
                ;
-  phJr:        jmp userInput
+  phJr:        mov BX,0A80h   ; Sprite 21 - quit
+               mov AX,60h     ; AX = Location to draw "Quit"
+               call JrDrawSpr
+               add BX,80h     ; Sprite 22 - PCjr "Logo"
+               add AX,38h     ; Location to draw logo
+               call JrDrawSpr
+               mov BX,0B80h   ; Sprite 23 - 7
+               mov AX,288h    ; Location of top left slot of board
+               call JrDrawSpr
+               add BX,80h     ; Sprite 24 - 8
+               add AX,20h     ; Top middle slot of board
+               call JrDrawSpr
+               add BX,80h     ; Sprite 25 - 9
+               add AX,20h     ; Top right slot of board
+               call JrDrawSpr
+               add BX,80h     ; Sprite 26 - 4
+               add AX,9C0h    ; Middle left slot of board
+               call JrDrawSpr
+
+               mov AH,7       ; DOS 07 - Read single char
+               int 21h        ; Wait for user to press a key
+
+               mov BX,jrlast  ; Last "sprite" - blank
+               mov AX,60h     ; Location to un-draw "Quit"
+               call JrDrawSpr
+               add AX,38h     ; Location to un-draw the logo
+               call JrDrawSpr
+
+
+               mov AX,gameVars ; Get game board data
+               shr AX,1        ; Remove current player bit
+               mov CX,288h     ; Screen location of top left board slot
+               xor DX,DX       ; Board index = 0, 0 (DH = row, DL = column)
+  phJrCol:     push DX         ; Backup board index
+               push AX         ; Backup game board data
+               push CX         ; Backup screen location
+               and AX,1Fh      ; We only want the 5 LSBs
+               call getColumn  ; Get column number specified by DL
+               mov BX,jrlast   ; Address of last PCjr "sprite" (blank)
+               cmp AH,0        ; Check if this board slot is empty
+               jz phJrBlank    ; If it is, draw the sprite now, otherwise get the player sprite:
+               dec AH          ; Now AH = 0 for Player 1, and AH = 1 for Player 2
+               mov BL,AH       ; Store the player that owns this slot in BL
+               xor BH,BH       ; BH = 0
+               shl BX,7        ; If BX was 0, it's still 0, otherwise it went from 1 to 40h
+  phJrBlank:   pop AX          ; Restore screen location (in AX for sprite routine)
+               call JrDrawSpr  ; Draw whatever sprite we've specified in BX
+               mov CX,AX       ; Copy screen location back to CX
+               add CX,20h      ; Screen location for next board slot (on same row)
+               pop AX          ; Restore game board data
+               pop DX          ; Restore board index
+               inc DL          ; Next column
+               cmp DL,3        ; Check if we just drew the last column
+               jne phJrCol     ; If not, draw this column
+               xor DL,DL       ; Otherwise, set column to 0
+               shr AX,5        ; And we're done with this row, so remove it
+               add CX,9A0h     ; New row, means new screen location, this should get us there
+               inc DH          ; Next row
+               cmp DH,3        ; Check if we've finished
+               jne phJrCol     ; If not, draw this row
+               jmp userInput   ; Otherwise, return to userInput
                ;
                ; Draw help message
                ;
-  phCGA:       jmp userInput
+  phCGA:       mov BX,0540h    ; Sprite 21 - quit
+               mov AX,30h      ; AX = Location to draw "Quit"
+               call CGADrawSpr
+               add BX,40h      ; Sprite 22 - CGA "Logo"
+               add AX,1Ch      ; Location to draw the logo
+               call CGADrawSpr
+               mov BX,5C0h     ; Sprite 23 - 7
+               mov AX,284h     ; Location of top left slot of board
+               call CGADrawSpr
+               add BX,40h      ; Sprite 24 - 8
+               add AX,10h      ; Top middle slot of board
+               call CGADrawSpr
+               add BX,40h      ; Sprite 25 - 9
+               add AX,10h      ; Top right slot of board
+               call CGADrawSpr
+               add BX,40h      ; Sprite 26 - 4
+               add AX,9E0h     ; Middle left slot of board
+               call CGADrawSpr
+
+               mov AH,7        ; DOS 07 - Read single char
+               int 21h         ; Wait for user to press a key
+
+               mov BX,cgalast  ; Last "sprite" - blank
+               mov AX,30h      ; Location to un-draw "Quit"
+               call CGADrawSpr
+               add AX,1Ch      ; Location to un-draw the logo
+               call CGADrawSpr
+
+
+               mov AX,gameVars ; Get game board data
+               shr AX,1        ; Remove current player bit
+               mov CX,284h     ; Screen location of top left board slot
+               xor DX,DX       ; Board index = 0, 0 (DH = row, DL = column)
+  phCGAcol:    push DX         ; Backup board index
+               push AX         ; Backup game board data
+               push CX         ; Backup screen location
+               and AX,1Fh      ; We only want the 5 LSBs
+               call getColumn  ; Get column number specified by DL
+               mov BX,cgalast  ; Address of last CGA "sprite" (blank)
+               cmp AH,0        ; Check if this board slot is empty
+               jz phCGAblank   ; If it is, draw the sprite now, otherwise get the player sprite:
+               dec AH          ; Now AH = 0 for Player 1, and AH = 1 for Player 2
+               mov BL,AH       ; Store the player that owns this slot in BL
+               xor BH,BH       ; BH = 0
+               shl BX,6        ; If BX was 0, it's still 0, otherwise it went from 1 to 20h
+  phCGAblank:  pop AX          ; Restore screen location (in AX for sprite routine)
+               call CGADrawSpr ; Draw whatever sprite we've specified in BX
+               mov CX,AX       ; Copy screen location back to CX
+               add CX,10h      ; Screen location for next board slot (on same row)
+               pop AX          ; Restore game board data
+               pop DX          ; Restore board index
+               inc DL          ; Next column
+               cmp DL,3        ; Check if we just drew the last column
+               jne phCGAcol    ; If not, draw this column
+               xor DL,DL       ; Otherwise, set column to 0
+               shr AX,5        ; And we're done with this row, so remove it
+               add CX,9D0h     ; New row, means new screen location, this should get us there
+               inc DH          ; Next row
+               cmp DH,3        ; Check if we've finished
+               jne phCGAcol    ; If not, draw this row
+               jmp userInput   ; Otherwise, return to userInput
                ;
                ; Draw help message
                ;
-  phEGA:       jmp userInput
+  phEGA:       mov BX,0A80h    ; Sprite 21 - quit
+               mov AX,18h      ; AX = Location to draw "Quit"
+               call EGADrawSpr
+               add BX,80h      ; Sprite 22 - EGA "Logo"
+               add AX,0Eh      ; Location to draw logo
+               call EGADrawSpr
+               mov BX,0B80h    ; Sprite 23 -7
+               mov AX,282h     ; Location of top left slot of board
+               call EGADrawSpr
+
+               mov AH,7        ; DOS 07 - Read single char
+               int 21h         ; Wait for user to press a key
+
+               mov BX,jrlast   ; Last "sprite" - blank
+               mov AX,18h      ; Location to un-draw "Quit"
+               call EGADrawSpr
+               add AX,0Eh      ; Location to un-draw the logo
+               call EGADrawSpr
+               mov BX,0B80h    ; I don't know what the hell this is for
+               mov AX,282h     ; And I'd rather figure it out later...
+               call EGADrawSpr
+               jmp userInput
              ;
              ; Main game loop end
              ;
@@ -708,7 +872,9 @@ phText:        push DS         ; backup data segment
              ;
              ; Return to DOS
              ;
-ExitGame:    EXIT 0 ; Calls macro to terminate program and sets ERRORLEVEL to 0
+ExitGame:    ;mov AX,0C00h
+             ;int 21h
+             EXIT 0 ; Calls macro to terminate program and sets ERRORLEVEL to 0
 
 main         ENDP
 ;---------------------|
@@ -953,20 +1119,20 @@ drawBoardEGA PROC
              ;
              ; draw board
              ;
-             mov BX,grpattern ; pattern of rows
+             mov BX,pattern  ; pattern of rows
              xor AX,AX       ; begin at pixel 0,0
-dbEGAStart:  cmp AX,1400h    ; check if we've drawn all 11 rows
+dbEGAStart:  cmp AX,1B80h    ; check if we've drawn all 11 rows
              jae dbEGAEnd    ; if so, draw "Your Move" sprites
              test BX,1       ; check LSB
              jz dbEGA0       ; 0 represents a vertical bar row
              jnz dbEGA1      ; 1 represents a horizontal bar + cross row
 dbEGA0:      push BX         ; backup pattern
-             add AX,4        ; add 6
+             add AX,6        ; add 6
              mov BX,680h     ; sprite 13, vertical bar
              call EGADrawSpr ; draw first bar
-             add AX,6        ; add 48
+             add AX,8        ; add 32
              call EGADrawSpr ; draw second bar
-             add AX,276h     ; beginning of next row
+             add AX,272h     ; beginning of next row
              pop BX          ; restore pattern
              shr BX,1        ; next pattern
              jmp dbEGAStart  ; next iteration
@@ -976,22 +1142,28 @@ dbEGA1:      push BX         ; backup pattern
              add AX,2        ; next grid space
              call EGADrawSpr ; draw horizontal bar 2
              add AX,2        ; next grid space
+             call EGADrawSpr ; draw horizontal bar 3
+             add AX,2        ; next grid space
              add BX,80h      ; sprite 15, cross
              call EGADrawSpr ; draw cross bar 1
              sub BX,80h      ; sprite 14, horizontal bar
              add AX,2        ; next grid space
-             call EGADrawSpr ; draw horizontal bar 3
-             add AX,2        ; next grid space
              call EGADrawSpr ; draw horizontal bar 4
+             add AX,2        ; next grid space
+             call EGADrawSpr ; draw horizontal bar 5
+             add AX,2        ; next grid space
+             call EGADrawSpr ; draw horizontal bar 6
              add AX,2        ; next grid space
              add BX,80h      ; sprite 15, cross
              call EGADrawSpr ; draw cross bar 2
              sub BX,80h      ; sprite 14, horizontal bar
              add AX,2        ; next grid space
-             call EGADrawSpr ; draw horizontal bar 5
+             call EGADrawSpr ; draw horizontal bar 7
              add AX,2        ; next grid space
-             call EGADrawSpr ; draw horizontal bar 6
-             add AX,272h     ; beginning of next row (3C + 4B0)
+             call EGADrawSpr ; draw horizontal bar 8
+             add AX,2        ; final grid space
+             call EGADrawSpr ; draw horizontal bar 9
+             add AX,26Ch     ; beginning of next row (3C + 4B0)
              pop BX          ; restore pattern
              shr BX,1        ; next pattern
              jmp dbEGAStart  ; next iteration
@@ -1047,9 +1219,9 @@ tryMove    PROC
            shr AX,CL       ; eliminate CL * 5 bits
            and AX,1Fh      ; eliminate bits 5-15
            push DX         ; backup DX
-           call getColumn  ; now DL = 0 1 or 2 (_ X or O)
+           call getColumn  ; now AH = 0 1 or 2 (_ X or O)
            pop CX          ; restore DX into CX
-           cmp DL,0        ; test if column is empty
+           cmp AH,0        ; test if column is empty
            jnz tmFinish    ; if it isn't, then don't do anything
            push CX         ; store column and row data for win testing later
            ;
@@ -1210,16 +1382,19 @@ drawPieceCGA ENDP
 drawPieceEGA PROC
              push CX         ; backup row, column
              mov AL,CH       ; place row in AL
+             shl AL,1
+             shl AL,1        ; row * 4
+             inc AL          ; add 1
              xor AH,AH       ; remove upper byte
-             mov DX,780h     ; 160 * 4 (y-distance between sprites) * 3
+             mov DX,280h     ; 160 * 4 (y-distance between sprites)
              mul DX          ; multiply
-             add AX,140h     ; 8 pixel rows (half of sprite height)
              mov BX,AX       ; store video offset in BX
              mov AL,CL       ; place column in AL
              xor AH,AH       ; 0 out AH
-             mov DX,6        ; each piece should be 3 sprites (48 pixels) apart
-             mul DX
-             add AX,1        ; add 8 pixels
+             shl AX,1
+             shl AX,1
+             shl AX,1        ; column * 4 * 2 = "y coordinate"
+             add AX,2        ; add one more column
              add AX,BX       ; add to video offset (now offset is stored in AX)
              mov BX,gameVars ; get game data in BX
              and BX,1        ; only want player
@@ -1338,27 +1513,27 @@ twTest4:    cmp CH,1        ; check if play was in middle column
             and AX,1Fh      ; get row 0
             xor DL,DL       ; column 0
             call getColumn  ; check 0,0
-            cmp DL,BL       ; see if 0,0 is owned by this player
+            cmp AH,BL       ; see if 0,0 is owned by this player
             jne twTest4R    ; if it isn't, try going right to left
             mov AX,gameVars ; get game data
             shr AX,11       ; get row 2
             mov DL,2        ; column 2
             call getColumn  ; check 2,2
-            cmp DL,BL       ; see if 2,2 is owned by this player
+            cmp AH,BL       ; see if 2,2 is owned by this player
             je twWin        ; if it is, they win
-            jmp twEnd       ; otherwise, keep playing...
+            ;jmp twEnd       ; otherwise, keep playing...
 twTest4R:   mov AX,gameVars ; get game data
             shr AX,1        ; remove player
             and AX,1Fh      ; get row 0
             mov DL,2        ; column 2
             call getColumn  ; check 2,0
-            cmp DL,BL       ; see if 2,0 is owned by this player
+            cmp AH,BL       ; see if 2,0 is owned by this player
             jne twEnd       ; if it isn't, keep playing...
             mov AX,gameVars ; get game data
             shr AX,11       ; get row 2
             xor DL,DL       ; column 0
             call getColumn  ; check 0,2
-            cmp DL,BL       ; see if 0,2 is owned by this player
+            cmp AH,BL       ; see if 0,2 is owned by this player
             je twWin        ; if it is, they win
             jmp twEnd       ; otherwise, keep playing...
             ;
@@ -1490,7 +1665,7 @@ testWin     ENDP
 ;   Place row data in AX    |
 ;   and column in DL (0-2)  |
 ; column will be returned   |
-; in DL                     |
+; in AH                     |
 ;---------------------------|
 getColumn PROC
           mov CX,0FF03h ; set iteration 255 and CL to 3 for division
@@ -1499,7 +1674,6 @@ gcLoop:   inc CH        ; increment iteration
           div CL        ; divide board in AX by 3
           cmp CH,DL     ; compare current column to requested column
           jnz gcLoop    ; if we haven't reached the column we want, try again
-          mov DL,AH     ; store value of column in DL
           ret
 getColumn ENDP
 ;---------------------------|
