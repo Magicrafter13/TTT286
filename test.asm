@@ -59,7 +59,7 @@ main PROC ; Define Main procedure
 ;
 ; Start of Program
 ;
-start:
+start::
 
   ; ---------- set data location
   mov AX,MyData ; Moves Data segment address to AX register

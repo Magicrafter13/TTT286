@@ -139,7 +139,7 @@ main         PROC
              ;
              ; Start of Program
              ;
-start:       mov AX,MyData ; Moves Data segment address to AX register
+start::      mov AX,MyData ; Moves Data segment address to AX register
              mov DS,AX     ; Allowing us to move that address to the intended data segment register, DS
              mov AX,0B800h ; most modes use this address for the video memory
              mov ES,AX

@@ -9,7 +9,9 @@
 *.EXE
 TICTAC.OBJ
 /DEBUG.COM
-/INIT.BAT
+/init.bat
 *.zip
 /TOOLS
 *.TGA
+/build
+/BUILD
